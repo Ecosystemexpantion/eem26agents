@@ -1405,6 +1405,10 @@ async function doLogin() {
   if (error) { msg.className = 'amsg err'; msg.textContent = 'Invalid email or password.'; btn.disabled = false; btn.textContent = 'Access Dashboard'; return; }
   currentUser = data.user;
   await loadDashboard();
+  if (currentProfile) {
+    startRealtime(currentProfile.id, currentProfile.is_admin);
+    startSettlementTimer();
+  }
   btn.disabled = false; btn.textContent = 'Access Dashboard';
 }
 
@@ -1639,8 +1643,11 @@ function renderDash(p, sales, withdrawals, globalStacks) {
   const earned = p.total_earned || 0;
   const next = milestones.find(m => m > earned) || milestones[milestones.length - 1];
   const prev = milestones[milestones.indexOf(next) - 1] || 0;
-  const pct = Math.min(100, ((earned - prev) / (next - prev)) * 100);
-  document.getElementById('ms-text').textContent = `${sym}${(next - earned).toLocaleString()} more to reach ${sym}${next.toLocaleString()} 🚀`;
+  const pct = (next === prev) ? 100 : Math.min(100, ((earned - prev) / (next - prev)) * 100);
+  const msText = earned >= next
+    ? `🎉 You've hit ${sym}${next.toLocaleString()}! Keep going!`
+    : `${sym}${(next - earned).toLocaleString()} more to reach ${sym}${next.toLocaleString()} 🚀`;
+  document.getElementById('ms-text').textContent = msText;
   setTimeout(() => document.getElementById('ms-fill').style.width = pct + '%', 500);
   document.getElementById('ms-labels').innerHTML = milestones.slice(0, 5).map(m => `
     <div class="ms-label ${earned >= m ? 'done' : ''}">
@@ -1677,7 +1684,7 @@ function renderDash(p, sales, withdrawals, globalStacks) {
             </div>
           </div>
           <div>
-            <div class="proc-amount">${sym}${Number(s.commission).toLocaleString()}</div>
+            <div class="proc-amount">${currCfg.symbol}${Number(s.commission).toLocaleString()}</div>
             <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);text-align:right;">Your commission</div>
           </div>
         </div>
@@ -1834,6 +1841,10 @@ async function doWithdraw() {
     msg.textContent = error.message.includes('unique') ? 'You already have a pending withdrawal.' : 'Submission failed. Please try again.';
     btn.disabled = false; btn.textContent = '💸 Submit Withdrawal Request'; return;
   }
+  // Immediately deduct balance so agent cannot submit a second withdrawal against the same funds
+  const newBalance = Math.max(0, (freshProfile.available_balance || 0) - amt);
+  await sb.from('profiles').update({ available_balance: newBalance }).eq('id', currentProfile.id);
+  currentProfile.available_balance = newBalance;
   document.getElementById('w-form-wrap').style.display = 'none';
   document.getElementById('w-success-banner').style.display = 'block';
   document.getElementById('w-amt').value = '';
@@ -2174,6 +2185,9 @@ async function _processEntry() {
     document.getElementById('sale-img-input').value = '';
     document.getElementById('sale-customer-email').value = '';
     document.getElementById('sale-customer-phone').value = '';
+    document.getElementById('adm-prod').value = '';
+    document.getElementById('adm-sale').value = '';
+    document.getElementById('adm-comm').value = '';
     await _loadCtrl(); _renderGrid1(''); _renderRoster();
   } catch(err) {
     msg.className = 'amsg err';
@@ -2300,7 +2314,7 @@ function startRealtime(profileId, isAdmin) {
       table: 'withdrawals'
     }, async () => {
       if (!isAdmin) return;
-      await loadWithdrawalRequests();
+      await _fetchQueue();
       showLiveIndicator('💸 New withdrawal request!');
       toast('💸 New withdrawal request received!');
     })
@@ -2373,6 +2387,17 @@ async function doResetPassword() {
 }
 
 // ── PAGE LOAD ──
+// Handle session expiry — send agent back to login automatically
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    currentUser = null;
+    currentProfile = null;
+    if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
+    showPg('pg-auth');
+    toast('Your session has expired. Please log in again.', 'err');
+  }
+});
+
 window.addEventListener('load', async () => {
   // Check if opened from password reset email
   const hash = window.location.hash;
