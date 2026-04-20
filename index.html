@@ -853,6 +853,20 @@ tr:hover td { background: rgba(0,200,83,.02); }
 </div></div>
 </div>
 
+<!-- ════════════ PENDING APPROVAL PAGE ════════════ -->
+<div class="pg" id="pg-pending">
+<div class="auth-wrap"><div class="auth-box" style="text-align:center;">
+  <div style="font-size:56px;margin-bottom:16px;">⏳</div>
+  <div style="font-family:var(--font-display);font-size:22px;letter-spacing:3px;color:var(--g);margin-bottom:12px;">AWAITING APPROVAL</div>
+  <p style="color:var(--text2);font-size:14px;line-height:1.7;margin-bottom:24px;">
+    Your account has been created and is pending admin approval.<br><br>
+    You will be notified once your account is activated. This usually takes <strong style="color:var(--g);">24 hours</strong>.
+  </p>
+  <p style="color:var(--muted);font-size:12px;font-family:var(--font-mono);">Contact EEM26 Support if you need help.</p>
+  <button class="btn" style="margin-top:20px;" onclick="doLogout()">Back to Login</button>
+</div></div>
+</div>
+
 <!-- ════════════ RESET PASSWORD PAGE ════════════ -->
 <div class="pg" id="pg-reset">
 <div class="auth-wrap"><div class="auth-box">
@@ -1041,6 +1055,16 @@ tr:hover td { background: rgba(0,200,83,.02); }
       <!-- ── PROFILE ── -->
       <div class="sec" id="sec-profile">
         <div class="page-header"><div class="pt">Profile</div><div class="ps">Your account and bank details</div></div>
+        <!-- Referral / Affiliate link card -->
+        <div class="card" style="background:linear-gradient(135deg,rgba(0,200,83,.07),rgba(0,200,83,.03));border-color:rgba(0,200,83,.3);">
+          <div class="ct" style="color:var(--g);">🔗 Your Payhip Affiliate Email</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6;">This is the email Payhip uses to track your sales. Make sure it matches the email you used to sign up as a Payhip affiliate.</p>
+          <div style="background:var(--deep);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <span id="p-affiliate-email" style="font-family:var(--font-mono);font-size:13px;color:var(--g);word-break:break-all;"></span>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('p-affiliate-email').textContent).then(()=>toast('✅ Copied!'))" style="background:var(--g);color:#000;border:none;padding:8px 12px;border-radius:7px;font-weight:700;font-size:11px;cursor:pointer;white-space:nowrap;">Copy</button>
+          </div>
+        </div>
+
         <div class="card">
           <div class="ct">👤 Personal Info</div>
           <div class="ir"><span>Full Name</span><span id="p-name"></span></div>
@@ -1103,6 +1127,7 @@ tr:hover td { background: rgba(0,200,83,.02); }
           <button class="admin-tab" onclick="_showPane('sales',this)">💰 Record Sale</button>
           <button class="admin-tab" onclick="_showPane('stacks',this)">📦 Stacks</button>
           <button class="admin-tab" onclick="_showPane('agents',this)">👥 Agents</button>
+          <button class="admin-tab" onclick="_showPane('pending',this)">🕐 Pending <span class="badge-count" id="pending-count" style="display:none;"></span></button>
         </div>
 
         <!-- WITHDRAWALS PANE -->
@@ -1239,6 +1264,15 @@ tr:hover td { background: rgba(0,200,83,.02); }
           </div>
         </div>
 
+        <!-- PENDING AGENTS PANE -->
+        <div class="admin-pane" id="apane-pending">
+          <div class="card">
+            <div class="ct">🕐 Agents Awaiting Approval</div>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">These agents registered but cannot access the dashboard until you approve them.</p>
+            <div id="pending-agents-list"><div class="empty"><div class="empty-ic">⏳</div><p>Loading...</p></div></div>
+          </div>
+        </div>
+
       </div><!-- end admin -->
     </main>
   </div>
@@ -1286,6 +1320,7 @@ function populateBankDropdown(selectId, country) {
 const SUPABASE_URL = 'https://jebixaluhhuidxmnlgit.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_xICbsF0ySWXPrpoBOVOx0w_S8_-OYey';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const VAPID_PUBLIC = 'BKj4Mn6kKXK7ZZWptvFJ9pNgvzDyPvVRRGsQZNfmV9F5IIZWN1WWP7Va_SQLm_cmS5F4SVKB2rGovNp-PyK3e7k';
 
 // Currency config with settlement hours
 const CURRENCIES = {
@@ -1336,6 +1371,7 @@ function _showPane(id, btn) {
   if (id === 'sales') { _loadCtrl(); _renderGrid1(''); }
   if (id === 'stacks') { _loadCtrl(); _renderGrid2(''); }
   if (id === 'agents') _renderRoster();
+  if (id === 'pending') _renderPending();
 }
 function authTab(t) {
   document.getElementById('f-login').style.display = t === 'login' ? 'block' : 'none';
@@ -1408,6 +1444,7 @@ async function doLogin() {
   if (currentProfile) {
     startRealtime(currentProfile.id, currentProfile.is_admin);
     startSettlementTimer();
+    if (!currentProfile.is_admin) subscribePush(currentProfile.id);
   }
   btn.disabled = false; btn.textContent = 'Access Dashboard';
 }
@@ -1508,6 +1545,12 @@ async function loadDashboard() {
   if (!profile) { toast('Could not load profile. Please refresh.', 'err'); return; }
   currentProfile = profile;
 
+  // Block unapproved agents (admins always pass)
+  if (!profile.is_admin && profile.is_approved === false) {
+    showPg('pg-pending');
+    return;
+  }
+
   document.getElementById('nav-nm').textContent = profile.name.split(' ')[0];
   document.getElementById('ov-date').textContent = new Date().toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -1516,6 +1559,11 @@ async function loadDashboard() {
     document.getElementById('side-admin').style.display = 'flex';
     await _loadCtrl();
     await _fetchQueue();
+    // Show pending agents count badge
+    const { data: pendingAgents } = await sb.from('profiles').select('id').eq('is_admin', false).eq('is_approved', false);
+    const pCount = (pendingAgents || []).length;
+    const pb = document.getElementById('pending-count');
+    if (pb && pCount > 0) { pb.style.display = 'flex'; pb.textContent = pCount; }
   }
 
   const { data: sales } = await sb.from('sales').select('*').eq('agent_id', profile.id).order('created_at', { ascending: false });
@@ -1569,8 +1617,9 @@ async function checkSettlements(sales, profile) {
     const totalEarned = (allSales || []).reduce((sum, s) => sum + s.commission, 0);
     const totalWithdrawn = (allPaid || []).reduce((sum, w) => sum + w.amount, 0);
     const correctBalance = Math.max(0, totalEarned - totalWithdrawn);
-    await sb.from('profiles').update({ available_balance: correctBalance }).eq('id', profile.id);
+    await sb.from('profiles').update({ available_balance: correctBalance, total_earned: totalEarned }).eq('id', profile.id);
     currentProfile.available_balance = correctBalance;
+    currentProfile.total_earned = totalEarned;
     const { data: freshSales } = await sb.from('sales').select('*').eq('agent_id', profile.id).order('created_at', { ascending: false });
     const { data: freshW } = await sb.from('withdrawals').select('*').eq('agent_id', profile.id).order('created_at', { ascending: false });
     const { data: adminP } = await sb.from('profiles').select('stacks_allocated').eq('is_admin', true).maybeSingle();
@@ -1616,6 +1665,8 @@ function renderDash(p, sales, withdrawals, globalStacks) {
   // Profile
   document.getElementById('p-name').textContent = p.name;
   document.getElementById('p-email').textContent = p.email;
+  const affiliateEl = document.getElementById('p-affiliate-email');
+  if (affiliateEl) affiliateEl.textContent = p.email;
   document.getElementById('p-phone').textContent = p.phone || '—';
   document.getElementById('p-country').textContent = (currConfig.flag || '') + ' ' + (p.country || '—');
   document.getElementById('p-currency').textContent = currency + ' ' + sym;
@@ -1820,6 +1871,10 @@ async function doWithdraw() {
   const amt = parseFloat(document.getElementById('w-amt').value);
   const msg = document.getElementById('w-msg');
   if (!amt || amt <= 0) { msg.className = 'amsg err'; msg.textContent = 'Please enter a valid amount.'; return; }
+  const MIN_WITHDRAWAL = { NGN: 5000, GHS: 50, ZAR: 100, KES: 500, XAF: 3000, USD: 5 };
+  const minAmt = MIN_WITHDRAWAL[currentProfile.currency] || 5000;
+  const sym = CURRENCIES[currentProfile.currency]?.symbol || '₦';
+  if (amt < minAmt) { msg.className = 'amsg err'; msg.textContent = `Minimum withdrawal is ${sym}${minAmt.toLocaleString()}.`; return; }
   withdrawCooldown = true; setTimeout(() => withdrawCooldown = false, 5000);
   const btn = document.getElementById('btn-withdraw');
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Checking balance...';
@@ -2241,6 +2296,43 @@ async function _renderRoster() {
 
 
 
+async function _renderPending() {
+  const cont = document.getElementById('pending-agents-list');
+  cont.innerHTML = '<div class="empty"><div class="empty-ic">⏳</div><p>Loading...</p></div>';
+  const { data: pending } = await sb.from('profiles')
+    .select('*').eq('is_admin', false).eq('is_approved', false).order('created_at', { ascending: false });
+  const count = (pending || []).length;
+  const badge = document.getElementById('pending-count');
+  if (badge) { badge.style.display = count > 0 ? 'flex' : 'none'; badge.textContent = count; }
+  if (!pending?.length) {
+    cont.innerHTML = '<div class="empty"><div class="empty-ic">✅</div><p>No agents awaiting approval</p></div>'; return;
+  }
+  cont.innerHTML = pending.map(u => {
+    const uCurr = CURRENCIES[u.currency] || CURRENCIES.NGN;
+    return `<div class="wd-card" style="margin-bottom:12px;padding:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-weight:700;font-family:var(--font-ui);font-size:15px;">${u.name}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;font-family:var(--font-mono);">${u.email}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">${uCurr.flag} ${u.country || ''} · ${u.phone || 'No phone'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Bank: ${u.bank_name || '—'} · ${u.bank_account || '—'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Registered: ${fmtDate(u.created_at)}</div>
+        </div>
+        <button onclick="_approveAgent('${u.id}')" style="background:var(--g);color:#000;border:none;padding:10px 16px;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;font-family:var(--font-ui);">
+          ✅ Approve
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function _approveAgent(agentId) {
+  const { error } = await sb.from('profiles').update({ is_approved: true }).eq('id', agentId);
+  if (error) { toast('Failed to approve. Try again.', 'err'); return; }
+  toast('✅ Agent approved! They can now access their dashboard.');
+  await _renderPending();
+}
+
 // ════════════════════════════════════════
 // REAL-TIME SUBSCRIPTIONS
 // ════════════════════════════════════════
@@ -2348,11 +2440,32 @@ function startRealtime(profileId, isAdmin) {
 
 function showLiveIndicator(msg) {
   toast(msg);
-  // Flash the live dot
   const dot = document.getElementById('live-dot');
   if (dot) {
     dot.style.background = '#FFD700';
     setTimeout(() => dot.style.background = '#00C853', 1000);
+  }
+}
+
+// ── PUSH NOTIFICATIONS ──
+async function subscribePush(profileId) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: VAPID_PUBLIC
+    });
+    // Save subscription to Supabase
+    await sb.from('push_subscriptions').upsert({
+      profile_id: profileId,
+      subscription: JSON.stringify(sub),
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'profile_id' });
+  } catch (err) {
+    console.warn('Push subscription failed:', err);
   }
 }
 
@@ -2413,6 +2526,7 @@ window.addEventListener('load', async () => {
     if (currentProfile) {
       startRealtime(currentProfile.id, currentProfile.is_admin);
       startSettlementTimer();
+      if (!currentProfile.is_admin) subscribePush(currentProfile.id);
     }
   }
 });
