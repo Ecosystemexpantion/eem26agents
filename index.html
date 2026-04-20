@@ -2448,15 +2448,30 @@ function showLiveIndicator(msg) {
 }
 
 // ── PUSH NOTIFICATIONS ──
+function _vapidKey(b64url) {
+  const pad = '='.repeat((4 - b64url.length % 4) % 4);
+  const b64 = (b64url + pad).replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+
 async function subscribePush(profileId) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) {
+      await sb.from('push_subscriptions').upsert({
+        profile_id: profileId,
+        subscription: JSON.stringify(existing),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'profile_id' });
+      return;
+    }
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return;
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: VAPID_PUBLIC
+      applicationServerKey: _vapidKey(VAPID_PUBLIC)
     });
     // Save subscription to Supabase
     await sb.from('push_subscriptions').upsert({
