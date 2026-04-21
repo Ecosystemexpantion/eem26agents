@@ -129,6 +129,8 @@ Download: https://ecosystemexpantion.github.io/Tech_stack-premium-/` : ""}
 ${phase === "REENGAGE" ? `This lead went cold 30 days ago. They may have attended Sunday training or may have registered and never showed up. Either way they went silent. Send one powerful re-engagement message that works for both cases.
 Open with a NEW student result from their country or matching their pain point — one they have not seen before. Then acknowledge that life gets busy and people lose momentum — make them feel understood, not chased. Then paint what they are still missing every single day they stay stuck. End with ONE clear call to action to download the Tech Stack now. Make it feel like a genuine personal check-in, not a sales blast.
 Download: https://ecosystemexpantion.github.io/Tech_stack-premium-/` : ""}
+${phase === "PENDING_CHECK" ? `This lead said they would download and get back but never returned. Send one short friendly check-up message. Remind them briefly about the premium link — it has extra packages not in the regular version including a new setup Coach Victor discovered that boosts sales in 2 days. Create light urgency — this offer won't always be available. Maximum 3 sentences. End with the download link.
+Download: https://ecosystemexpantion.github.io/Tech_stack-premium-/` : ""}
 
 FORMAT: First line SUBJECT: then body. First name only. Max 6 sentences REMINDER, 8 sentences FOLLOWUP/CONVICTION/REENGAGE. Short punchy paragraphs. Single blank line between paragraphs. Max 2 emojis. Results on own line. No hashtags no JSON no bold markdown. Never mention Coach Victor in REMINDER. Use ₦ NGN GH₵ Ghana KSh Kenya CFA WestAfrica. If interest hot=direct+urgent. If cold=build trust first. If warm=balance urgency+story.`;
 }
@@ -139,6 +141,50 @@ Deno.serve(async (req) => {
     const trainingLive = body.training_live === true;
     const broadcastMsg = body.broadcast as string | undefined;
     const dayOfWeek = getDayOfWeek();
+
+    // PENDING FOLLOW-UP CHECK MODE
+    if (body.check_pending === true) {
+      const now = new Date().toISOString();
+      const { data: pendingLeads } = await sb
+        .from("alex_leads")
+        .select("*")
+        .eq("status", "ATTENDED")
+        .not("pending_followup_at", "is", null)
+        .lt("pending_followup_at", now)
+        .not("telegram_chat_id", "is", null);
+
+      let checked = 0;
+      for (const lead of pendingLeads || []) {
+        if (!lead.name) continue;
+        // Skip if they already messaged back after the pending was set
+        if (lead.last_contacted_at && new Date(lead.last_contacted_at) > new Date(lead.pending_followup_at as string)) {
+          await sb.from("alex_leads").update({ pending_followup_at: null }).eq("id", lead.id);
+          continue;
+        }
+        try {
+          const res = await claude.messages.create({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 400,
+            system: buildCopyPrompt(lead as Record<string, unknown>, "PENDING_CHECK", 1, getDayOfWeek()),
+            messages: [{ role: "user", content: "Write the check-up message now." }],
+          });
+          const fullText = (res.content[0] as { type: string; text: string }).text;
+          const msgBody = cleanText(fullText.replace(/^SUBJECT:.+\n?/m, "").trim());
+          await sendTelegram(lead.telegram_chat_id as string, msgBody);
+          if (lead.email) await sendEmail(lead.email as string, "Still thinking about it?", msgBody);
+          // Clear pending so it only fires once per "I'll get back"
+          await sb.from("alex_leads").update({
+            pending_followup_at: null,
+            last_contacted_at: new Date().toISOString(),
+          }).eq("id", lead.id);
+          checked++;
+        } catch (e) {
+          console.error(`Pending followup failed for ${lead.id}:`, e);
+        }
+      }
+      await sendTelegram(ADMIN_CHAT_ID, `⏰ Pending check-up: ${checked} leads followed up.`);
+      return new Response("ok");
+    }
 
     // BROADCAST MODE
     if (broadcastMsg) {

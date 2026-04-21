@@ -8,6 +8,7 @@ const sb = createClient(
 const claude = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
 const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
 const ADMIN_CHAT_ID = "5870771695";
+const PURCHASE_PRICE = 39820;
 
 const ALEX_SYSTEM = `You are Alex, the AI sales assistant for EEM26 Selar Training — Africa's most results-driven digital business education brand.
 
@@ -69,13 +70,20 @@ This person is already registered for Sunday. Your job is to keep them excited a
 - After wind down count reaches 3, DO NOT reply to any further messages from this lead
 
 STAGE 2 — POST-TRAINING (status: ATTENDED):
-Your job is to get them to download the Tech Stack NOW.
+Your job is to CLOSE THE SALE YOURSELF. Do not wait for anyone. You are the closer — handle everything from first message to confirmed payment.
 - Reference Sunday training naturally to show you know they attended
 - Speak directly to their specific struggle
 - If they ask "what is EEM26": Break it down — AAM brings buyers automatically, SRE closes sales on autopilot, Coach Victor personally sets up Day 4 so they earn same day. Then push the download.
 - Handle objections immediately and confidently
 - Create urgency around Coach Victor's Day 4 personal setup — only 5 slots per batch
-- Push them to download: https://ecosystemexpantion.github.io/Tech_stack-premium-/
+
+PREMIUM LINK TACTIC (use when pushing for download):
+Tell them you are sending them a premium link right now. Say this specific link expires in 4 minutes. Say it contains extra packages not in the regular version — including a new setup Coach Victor discovered recently that boosts student sales within 2 days of activation. Make it feel exclusive and time-sensitive. Send the link IMMEDIATELY after that message. Do not wait.
+Premium link: https://ecosystemexpantion.github.io/Tech_stack-premium-/
+
+PAYMENT CONFIRMATION:
+When they say they downloaded, paid, bought, or purchased — respond EXACTLY: "Send me a quick screenshot of your payment and I'll confirm it with the coaches right now so your 4-day setup can begin. 📸"
+Do NOT celebrate. Do NOT update their status. Wait for the screenshot. The system will verify the payment automatically.
 
 STAGE 3 — DOWNLOADED (status: PURCHASED):
 Your job is to celebrate and build excitement.
@@ -163,14 +171,34 @@ function cleanText(text: string): string {
     .trim();
 }
 
+async function verifyPaymentScreenshot(base64: string): Promise<{ valid: boolean; amount: string; date: string }> {
+  const res = await claude.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 200,
+    messages: [{
+      role: "user",
+      content: [
+        { type: "image", source: { type: "base64", media_type: "image/jpeg" as const, data: base64 } },
+        { type: "text", text: `This is a payment screenshot. Extract: 1) The transaction amount in Naira. 2) The transaction date. Check if the amount equals exactly ₦${PURCHASE_PRICE.toLocaleString()} (${PURCHASE_PRICE}). Reply ONLY in this exact format:\nAMOUNT:X\nDATE:X\nVALID:yes or VALID:no` },
+      ],
+    }],
+  });
+  const text = (res.content[0] as { type: string; text: string }).text;
+  return {
+    valid: /VALID:yes/i.test(text),
+    amount: text.match(/AMOUNT:([^\n]+)/i)?.[1]?.trim() || "unknown",
+    date: text.match(/DATE:([^\n]+)/i)?.[1]?.trim() || "unknown",
+  };
+}
+
 Deno.serve(async (req) => {
   try {
     const update = await req.json();
     const msg = update.message || update.edited_message;
-    if (!msg?.text) return new Response("ok");
+    if (!msg?.text && !msg?.photo) return new Response("ok");
 
     const chatId = String(msg.chat.id);
-    const userText = msg.text.trim();
+    const userText = (msg.text || "").trim();
 
     let { data: lead } = await sb
       .from("alex_leads")
@@ -187,7 +215,7 @@ Deno.serve(async (req) => {
       lead = data;
     }
 
-    // Silent after wind down complete — except for scam/trust concerns which always get a response
+    // Silent after wind down complete — except for scam/trust concerns
     const trustKeywords = ["scam", "fake", "legit", "real", "trust", "proof", "fraud", "lie", "cheat", "verify"];
     const isTrustConcern = trustKeywords.some((w) => userText.toLowerCase().includes(w));
     if (
@@ -199,6 +227,42 @@ Deno.serve(async (req) => {
       return new Response("ok");
     }
 
+    // PHOTO HANDLER — payment screenshot verification
+    if (msg.photo && lead.status === "ATTENDED" && lead.purchase_screenshot_requested) {
+      const photo = msg.photo[msg.photo.length - 1];
+      const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${photo.file_id}`);
+      const fileData = await fileRes.json();
+      const filePath = fileData.result?.file_path;
+
+      if (filePath) {
+        const imgRes = await fetch(`https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`);
+        const imgBuffer = await imgRes.arrayBuffer();
+        const bytes = new Uint8Array(imgBuffer);
+        let binary = "";
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        const base64 = btoa(binary);
+
+        const { valid, amount, date } = await verifyPaymentScreenshot(base64);
+
+        if (valid) {
+          await sb.from("alex_leads").update({
+            status: "PURCHASED",
+            purchase_screenshot_requested: false,
+            last_contacted_at: new Date().toISOString(),
+          }).eq("id", lead.id);
+
+          await sendTelegram(chatId, `${lead.name || ""}! Payment confirmed ✅\n\nAmount: ${amount}\nDate: ${date}\n\nWelcome to EEM26! Your 4-day setup starts now. The coaches will reach you within 24 hours. Get ready — your life is about to change. 🔥`);
+          await sendTelegram(ADMIN_CHAT_ID, `💰 PURCHASE CONFIRMED\n\nName: ${lead.name}\nCountry: ${lead.country}\nEmail: ${lead.email}\nAmount: ${amount}\nDate: ${date}\n\nBegin 4-day setup immediately.`);
+        } else {
+          await sendTelegram(chatId, `I couldn't confirm this payment. The amount should be exactly ₦39,820. Please check and send the correct payment screenshot.`);
+        }
+      }
+      return new Response("ok");
+    }
+
+    // Skip if no text
+    if (!userText) return new Response("ok");
+
     const { data: history } = await sb
       .from("alex_conversations")
       .select("role, message")
@@ -206,9 +270,7 @@ Deno.serve(async (req) => {
       .order("created_at", { ascending: true })
       .limit(20);
 
-    const missing = ["name", "country", "pain_point", "email"].filter(
-      (f) => !lead[f]
-    );
+    const missing = ["name", "country", "pain_point", "email"].filter((f) => !lead[f]);
 
     const nigeriaDate = new Date(Date.now() + 3600 * 1000);
     const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -284,32 +346,36 @@ Objections raised so far: ${lead.objections_raised || "none recorded"}`;
         .eq("id", lead.id);
     }
 
-    // Hot lead alert to Coach Victor with full conversation history
+    // Hot lead alert with conversation history (Victor notified, Alex handles close)
     const isHotLead = /HOT_LEAD/i.test(rawReply);
     if (isHotLead) {
       const convoLines = (history || []).slice(-10).map(
         (h) => `${h.role === "user" ? "Lead" : "Alex"}: ${h.message}`
       ).join("\n");
-      const alertMsg = `🔥 HOT LEAD ALERT\n\nName: ${lead.name || "Unknown"}\nCountry: ${lead.country || "Unknown"}\nEmail: ${lead.email || "not collected"}\nPain point: ${lead.pain_point || "unknown"}\nInterest: ${lead.interest_level || "warm"}\nObjections: ${lead.objections_raised || "none"}\n\nThey just said: "${userText}"\n\n--- LAST 10 MESSAGES ---\n${convoLines}\n\nFollow up NOW.`;
+      const alertMsg = `🔥 HOT LEAD ALERT\n\nName: ${lead.name || "Unknown"}\nCountry: ${lead.country || "Unknown"}\nEmail: ${lead.email || "not collected"}\nPain point: ${lead.pain_point || "unknown"}\nInterest: ${lead.interest_level || "warm"}\nObjections: ${lead.objections_raised || "none"}\n\nThey just said: "${userText}"\n\n--- LAST 10 MESSAGES ---\n${convoLines}\n\nAlex is closing this. Monitor only.`;
       await sendTelegram(ADMIN_CHAT_ID, alertMsg);
     }
 
-    // Purchase detection
-    const purchaseWords = ["downloaded", "i downloaded", "just downloaded", "i have downloaded", "i bought", "i purchased", "i just bought"];
+    // Purchase claim → request screenshot
+    const purchaseWords = ["downloaded", "i downloaded", "just downloaded", "i have downloaded", "i bought", "i purchased", "i just bought", "i paid", "just paid", "i have paid"];
     if (purchaseWords.some((w) => userText.toLowerCase().includes(w)) && lead.status === "ATTENDED") {
-      await sb.from("alex_leads").update({ status: "PURCHASED" }).eq("id", lead.id);
+      await sb.from("alex_leads").update({ purchase_screenshot_requested: true }).eq("id", lead.id);
+    }
+
+    // "I'll get back" detection → set pending follow-up in 2 hours
+    const pendingPhrases = ["i'll get back", "i will get back", "let me check", "i'll download later", "download later", "i'll do it later", "i'll come back", "give me time", "i'll think", "let me think", "maybe later", "later"];
+    if (pendingPhrases.some((p) => userText.toLowerCase().includes(p)) && lead.status === "ATTENDED") {
+      const followupAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+      await sb.from("alex_leads").update({ pending_followup_at: followupAt }).eq("id", lead.id);
     }
 
     // Wind down tracking
-    const updates: Record<string, unknown> = {
-      last_contacted_at: new Date().toISOString(),
-    };
+    const updates: Record<string, unknown> = { last_contacted_at: new Date().toISOString() };
     if (lead.data_collected && lead.status === "REGISTERED") {
       updates.wind_down_count = (lead.wind_down_count || 0) + 1;
     }
     await sb.from("alex_leads").update(updates).eq("id", lead.id);
 
-    // Clean reply and save
     const alexReply = cleanText(rawReply);
 
     await sb.from("alex_conversations").insert([
