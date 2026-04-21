@@ -362,9 +362,9 @@ Objections raised so far: ${lead.objections_raised || "none recorded"}`;
       await sb.from("alex_leads").update({ purchase_screenshot_requested: true }).eq("id", lead.id);
     }
 
-    // "I'll get back" detection → set pending follow-up in 2 hours
-    const pendingPhrases = ["i'll get back", "i will get back", "let me check", "i'll download later", "download later", "i'll do it later", "i'll come back", "give me time", "i'll think", "let me think", "maybe later", "later"];
-    if (pendingPhrases.some((p) => userText.toLowerCase().includes(p)) && lead.status === "ATTENDED") {
+    // Auto pending follow-up: triggered when Alex sends the download link, not by lead's words
+    const sentDownloadLink = rawReply.includes("ecosystemexpantion.github.io/Tech_stack-premium-");
+    if (sentDownloadLink && lead.status === "ATTENDED") {
       const followupAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
       await sb.from("alex_leads").update({ pending_followup_at: followupAt }).eq("id", lead.id);
     }
