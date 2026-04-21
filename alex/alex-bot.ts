@@ -284,10 +284,13 @@ Objections raised so far: ${lead.objections_raised || "none recorded"}`;
         .eq("id", lead.id);
     }
 
-    // Hot lead alert to Coach Victor
+    // Hot lead alert to Coach Victor with full conversation history
     const isHotLead = /HOT_LEAD/i.test(rawReply);
     if (isHotLead) {
-      const alertMsg = `🔥 HOT LEAD ALERT\n\nName: ${lead.name || "Unknown"}\nCountry: ${lead.country || "Unknown"}\nEmail: ${lead.email || "not collected"}\nPain point: ${lead.pain_point || "unknown"}\n\nThey just said: "${userText}"\n\nFollow up NOW.`;
+      const convoLines = (history || []).slice(-10).map(
+        (h) => `${h.role === "user" ? "Lead" : "Alex"}: ${h.message}`
+      ).join("\n");
+      const alertMsg = `🔥 HOT LEAD ALERT\n\nName: ${lead.name || "Unknown"}\nCountry: ${lead.country || "Unknown"}\nEmail: ${lead.email || "not collected"}\nPain point: ${lead.pain_point || "unknown"}\nInterest: ${lead.interest_level || "warm"}\nObjections: ${lead.objections_raised || "none"}\n\nThey just said: "${userText}"\n\n--- LAST 10 MESSAGES ---\n${convoLines}\n\nFollow up NOW.`;
       await sendTelegram(ADMIN_CHAT_ID, alertMsg);
     }
 
