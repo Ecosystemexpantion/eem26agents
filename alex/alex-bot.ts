@@ -175,11 +175,14 @@ Deno.serve(async (req) => {
       lead = data;
     }
 
-    // Silent after wind down complete
+    // Silent after wind down complete — except for scam/trust concerns which always get a response
+    const trustKeywords = ["scam", "fake", "legit", "real", "trust", "proof", "fraud", "lie", "cheat", "verify"];
+    const isTrustConcern = trustKeywords.some((w) => userText.toLowerCase().includes(w));
     if (
       lead.data_collected &&
       lead.status === "REGISTERED" &&
-      (lead.wind_down_count || 0) >= 3
+      (lead.wind_down_count || 0) >= 3 &&
+      !isTrustConcern
     ) {
       return new Response("ok");
     }
@@ -195,7 +198,12 @@ Deno.serve(async (req) => {
       (f) => !lead[f]
     );
 
-    const leadContext = `
+    const nigeriaDate = new Date(Date.now() + 3600 * 1000);
+    const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+    const todayInfo = `TODAY: ${dayNames[nigeriaDate.getUTCDay()]} ${nigeriaDate.toISOString().slice(0,10)} — Nigeria time`;
+
+    const leadContext = `${todayInfo}
+
 CURRENT LEAD PROFILE:
 Name: ${lead.name || "NOT COLLECTED YET"}
 Country: ${lead.country || "NOT COLLECTED YET"}
