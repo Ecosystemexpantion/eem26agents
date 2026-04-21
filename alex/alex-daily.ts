@@ -140,10 +140,11 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const trainingLive = body.training_live === true;
     const broadcastMsg = body.broadcast as string | undefined;
+    const checkPending = !!body.check_pending;
     const dayOfWeek = getDayOfWeek();
 
     // PENDING FOLLOW-UP CHECK MODE
-    if (body.check_pending === true) {
+    if (checkPending) {
       const now = new Date().toISOString();
       const { data: pendingLeads } = await sb
         .from("alex_leads")
