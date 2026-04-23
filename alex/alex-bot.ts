@@ -215,16 +215,34 @@ Deno.serve(async (req) => {
       lead = data;
     }
 
-    // Silent after wind down complete — except for scam/trust concerns
+    // Silent after wind down complete — except for scam/trust concerns and buying intent
     const trustKeywords = ["scam", "fake", "legit", "real", "trust", "proof", "fraud", "lie", "cheat", "verify"];
+    const buyingKeywords = ["how much", "how do i get", "how to get", "i'm ready", "i am ready", "ready to", "tell me more", "what's the price", "whats the price", "price", "cost", "buy", "purchase", "download", "get it", "sign up", "join", "start", "i want it", "i want to start", "how do i download"];
     const isTrustConcern = trustKeywords.some((w) => userText.toLowerCase().includes(w));
+    const isBuyingIntent = buyingKeywords.some((w) => userText.toLowerCase().includes(w));
     if (
       lead.data_collected &&
       lead.status === "REGISTERED" &&
       (lead.wind_down_count || 0) >= 3 &&
-      !isTrustConcern
+      !isTrustConcern &&
+      !isBuyingIntent
     ) {
       return new Response("ok");
+    }
+
+    // If REGISTERED wind-down lead shows buying intent, treat them as ATTENDED immediately
+    if (
+      lead.data_collected &&
+      lead.status === "REGISTERED" &&
+      (lead.wind_down_count || 0) >= 3 &&
+      isBuyingIntent
+    ) {
+      await sb.from("alex_leads").update({
+        status: "ATTENDED",
+        attended_at: new Date().toISOString(),
+        followup_started_at: new Date().toISOString(),
+      }).eq("id", lead.id);
+      lead = { ...lead, status: "ATTENDED" };
     }
 
     // PHOTO HANDLER — payment screenshot verification
