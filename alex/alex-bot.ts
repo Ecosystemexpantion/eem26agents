@@ -230,21 +230,6 @@ Deno.serve(async (req) => {
       return new Response("ok");
     }
 
-    // If REGISTERED wind-down lead shows buying intent, treat them as ATTENDED immediately
-    if (
-      lead.data_collected &&
-      lead.status === "REGISTERED" &&
-      (lead.wind_down_count || 0) >= 3 &&
-      isBuyingIntent
-    ) {
-      await sb.from("alex_leads").update({
-        status: "ATTENDED",
-        attended_at: new Date().toISOString(),
-        followup_started_at: new Date().toISOString(),
-      }).eq("id", lead.id);
-      lead = { ...lead, status: "ATTENDED" };
-    }
-
     // PHOTO HANDLER — payment screenshot verification
     if (msg.photo && lead.status === "ATTENDED" && lead.purchase_screenshot_requested) {
       const photo = msg.photo[msg.photo.length - 1];
