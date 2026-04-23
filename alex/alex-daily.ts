@@ -183,7 +183,9 @@ Deno.serve(async (req) => {
           console.error(`Pending followup failed for ${lead.id}:`, e);
         }
       }
-      await sendTelegram(ADMIN_CHAT_ID, `⏰ Pending check-up: ${checked} leads followed up.`);
+      if (checked > 0) {
+        await sendTelegram(ADMIN_CHAT_ID, `⏰ Pending check-up: ${checked} leads followed up.`);
+      }
       return new Response("ok");
     }
 
