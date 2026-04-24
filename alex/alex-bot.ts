@@ -168,6 +168,32 @@ async function sendVideo(chatId: string, fileId: string): Promise<void> {
   });
 }
 
+const VIDEOS = {
+  withdrawal: [
+    "BAACAgQAAxkBAAIJjmnrvBjY1Hwe1wx1XwVogsuEtzD2AALnJAACdDphU40vfxI34PsmOwQ",
+    "BAACAgQAAxkBAAIJkGnrveF3De6Dbl6RyUnpoJWunFwYAALoJAACdDphUxNIpX_mtARTOwQ",
+    "BAACAgQAAxkBAAIJlmnrv4ZKrmurWAnNgNFHCkbY2-pzAALtJAACdDphU0s96kvbbKG6OwQ",
+    "BAACAgQAAxkBAAIJmGnrwB28mZOxlJNS2fXOj1DM27aVAALwJAACdDphU_zk2eW3LRE4OwQ",
+    "BAACAgQAAxkBAAIJmmnrwKgJSlPMQ_fKZA39NGI17nklAALyJAACdDphU0sAATRyGE8pnDsE",
+    "BAACAgQAAxkBAAIJnGnrwuxtY6cZozD1FIPhpQSnjjUVAAL1JAACdDphUx4zcDqjiKpoOwQ",
+    "BAACAgQAAxkBAAIJoGnrxLFLffFKDdPtBy5tpc_5oCFLAAL3JAACdDphU1S_fMbM2kC4OwQ",
+    "BAACAgQAAxkBAAIJomnrxahWCjZ6M1C4OzuI5Hbs7RrrAAL5JAACdDphU9jBISvJqFNGOwQ",
+    "BAACAgQAAxkBAAIJpGnrxt1KWTr1n3MlG5m1A8VO-_nUAAL6JAACdDphU60fNdKqfdGNOwQ",
+  ],
+  testimony: [
+    "BAACAgQAAxkBAAIJkmnrvnP0DAvg1UJWDk4Lq7KsY0iqAALqJAACdDphUxr2TEOqr2J0OwQ",
+    "BAACAgQAAxkBAAIJlGnrvubQWnr20UBV6bsnWnGTThxcAALrJAACdDphU27GUpCFsGM5OwQ",
+    "BAACAgQAAxkBAAIJnmnrxDXN-N39kSnyUfpUkW87OCVJAAL2JAACdDphU8x756aXYBRMOwQ",
+    "BAACAgQAAxkBAAIJpmnryA1j6t1ZWyQ7VNa6MZae2BofAAL-JAACdDphU3xVAnrcQQ3iOwQ",
+    "BAACAgQAAxkBAAIJqGnrykKeBgABXpl5qAoMyk4erzQH8wACASUAAnQ6YVOvTQx3KZ-pWDsE",
+  ],
+};
+
+function pickVideo(category: keyof typeof VIDEOS): string {
+  const pool = VIDEOS[category];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 function cleanText(text: string): string {
   return text
     .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -403,6 +429,19 @@ Objections raised so far: ${lead.objections_raised || "none recorded"}`;
     ]);
 
     await sendTelegram(chatId, alexReply);
+
+    // Send supporting video when ATTENDED lead hits an objection
+    if (lead.status === "ATTENDED") {
+      const hasObjection = rawReply.match(/OBJECTION:(?!none)([^\n]+)/i);
+      if (hasObjection) {
+        const objText = hasObjection[1].toLowerCase();
+        const category = (objText.includes("scam") || objText.includes("trust") || objText.includes("real") || objText.includes("fake") || objText.includes("legit"))
+          ? "withdrawal" as const
+          : "testimony" as const;
+        await sendVideo(chatId, pickVideo(category));
+      }
+    }
+
     return new Response("ok");
   } catch (e) {
     console.error("alex-bot error:", e);
