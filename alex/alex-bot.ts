@@ -160,6 +160,14 @@ async function sendTelegram(chatId: string, text: string): Promise<void> {
   });
 }
 
+async function sendVideo(chatId: string, fileId: string): Promise<void> {
+  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, video: fileId }),
+  });
+}
+
 function cleanText(text: string): string {
   return text
     .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -195,10 +203,18 @@ Deno.serve(async (req) => {
   try {
     const update = await req.json();
     const msg = update.message || update.edited_message;
-    if (!msg?.text && !msg?.photo) return new Response("ok");
+    if (!msg?.text && !msg?.photo && !msg?.video) return new Response("ok");
 
     const chatId = String(msg.chat.id);
     const userText = (msg.text || "").trim();
+
+    // Admin sends a video → reply with its file_id for the video library
+    if (msg.video && chatId === ADMIN_CHAT_ID) {
+      const fileId = msg.video.file_id;
+      console.log("VIDEO_FILE_ID:", fileId);
+      await sendTelegram(chatId, `✅ Video received\nfile_id: ${fileId}`);
+      return new Response("ok");
+    }
 
     let { data: lead } = await sb
       .from("alex_leads")
