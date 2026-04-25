@@ -137,7 +137,7 @@ TECH STACK: https://ecosystemexpantion.github.io/Tech_stack-premium-/
 SUNDAY TRAINING: https://t.me/+jX6QLzq04uQ3OGE0
 4-DAY SETUP: Day 1 SRE+AAM. Day 2 full integration. Day 3 sales page live. Day 4 Coach Victor personally handles final setup — student earns same day. Only 5 per batch.
 
-LEAD: Name=${lead.name} Country=${lead.country} PainPoint=${lead.pain_point} InterestLevel=${lead.interest_level || "warm"} Objections=${lead.objections_raised || "none"} Phase=${phase} DayNumber=${day_number} DayOfWeek=${day_of_week}
+LEAD: Name=${lead.name} Country=${lead.country} PainPoint=${lead.pain_point} InterestLevel=${lead.interest_level || "warm"} Objections=${lead.objections_raised || "none"} Phase=${phase} DayNumber=${day_number} DayOfWeek=${day_of_week} TodayDate=${getNigeriaDate().toISOString().slice(0,10)}
 
 ${phase === "REMINDER" ? `Job: get them to Sunday 8PM Nigeria training.
 Day1(Sun)=Training is TONIGHT — urgent final push, it starts in hours, do not miss this.
@@ -146,7 +146,7 @@ Day3(Tue)=Emotional student story matching their country — make them see thems
 Day4(Wed)=FOMO — people from their country are already setting up their systems while they wait. What is the cost of another week of delay?
 Day5(Thu)=3 days away — build anticipation, tease what AAM and SRE do without revealing everything.
 Day6(Fri)=2 days away — vivid contrast between their current pain point and life after EEM26.
-Day7(Sat)=Tomorrow is the day — excitement, send training link, tell them exactly what time and what to expect.
+Day7(Sat)=Today is Saturday. The training is TOMORROW Sunday at 8PM Nigeria time — NOT tonight. Write with excitement about tomorrow. Send training link. Tell them to be ready tomorrow evening at 8PM.
 Training link: https://t.me/+jX6QLzq04uQ3OGE0` : ""}
 ${phase === "FOLLOWUP" ? `Job: get them to download Tech Stack NOW.
 Day1=recap a specific moment from training + cost of every day they delay. Day2=speak painfully to their exact pain point + how EEM26 solves it automatically. Day3=student story matching their country. Day4=destroy their specific objection with proof from a student who had the same one. Day5=scarcity — Coach Victor personally handles only 5 people on Day 4, slots are filling. Day6=direct offer — list everything they get and ask them to reply YES. Day7=final push — slot is gone after today, this is the last message.
@@ -166,7 +166,7 @@ Download: https://ecosystemexpantion.github.io/Tech_stack-premium-/` : ""}
 ${phase === "PENDING_CHECK" ? `This lead said they would download and get back but never returned. Send one short friendly check-up message. Remind them briefly about the premium link — it has extra packages not in the regular version including a new setup Coach Victor discovered that boosts sales in 2 days. Create light urgency — this offer won't always be available. Maximum 3 sentences. End with the download link.
 Download: https://ecosystemexpantion.github.io/Tech_stack-premium-/` : ""}
 
-FORMAT: First line SUBJECT: then body. First name only. Max 6 sentences REMINDER, 8 sentences FOLLOWUP/CONVICTION/REENGAGE. Short punchy paragraphs. Single blank line between paragraphs. Max 2 emojis. Results on own line. No hashtags no JSON no bold markdown. Never mention Coach Victor in REMINDER. Use ₦ NGN GH₵ Ghana KSh Kenya CFA WestAfrica. If interest hot=direct+urgent. If cold=build trust first. If warm=balance urgency+story. NEVER reference previous messages or previous days — do not say "yesterday you saw" or "Friday you read" or any variation. Write every message as if it stands completely alone. No sign-off, no signature, no "Alex" at the bottom.`;
+FORMAT: First line SUBJECT: then body. First name only. Max 6 sentences REMINDER, 8 sentences FOLLOWUP/CONVICTION/REENGAGE. Short punchy paragraphs. Single blank line between paragraphs. Max 2 emojis. Results on own line. No hashtags no JSON no bold markdown. Never mention Coach Victor in REMINDER. Use ₦ NGN GH₵ Ghana KSh Kenya CFA WestAfrica. If interest hot=direct+urgent. If cold=build trust first. If warm=balance urgency+story. NEVER reference previous messages or previous days — do not say "yesterday you saw" or "Friday you read" or any variation. Write every message as if it stands completely alone. No sign-off, no signature, no "Alex" at the bottom. CRITICAL DAY RULE: If DayOfWeek=Saturday NEVER say "tonight" — always say "tomorrow night" or "tomorrow". If DayOfWeek=Sunday say "tonight" or "in a few hours". If DayOfWeek=Monday say "last night" or "yesterday evening".`;
 }
 
 Deno.serve(async (req) => {
