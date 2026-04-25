@@ -1200,7 +1200,7 @@ tr:hover td { background: rgba(0,200,83,.02); }
                 <label class="fl">Sale Amount</label>
                 <div style="position:relative;">
                   <span id="sale-currency-prefix" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);font-family:var(--font-mono);font-size:13px;">₦</span>
-                  <input class="fi" type="number" id="adm-sale" value="39820" style="padding-left:32px;">
+                  <input class="fi" type="number" id="adm-sale" value="39820" style="padding-left:32px;" oninput="const v=parseFloat(this.value)||0;document.getElementById('adm-comm').value=v?Math.round(v*0.5):'';">
                 </div>
               </div>
               <div class="fg">
@@ -1218,6 +1218,10 @@ tr:hover td { background: rgba(0,200,83,.02); }
               <div class="fg"><label class="fl">Customer Phone</label><input class="fi" type="tel" id="sale-customer-phone" placeholder="+234 800 000 0000"></div>
             </div>
 
+            <div class="fg" style="margin-bottom:12px;">
+              <label class="fl">Number of Sales</label>
+              <input class="fi" type="number" id="sale-qty" min="1" value="1" style="width:100px;text-align:center;" placeholder="1">
+            </div>
             <button class="btn" onclick="_processEntry()" id="btn-record-sale">✅ Record This Sale</button>
             <div class="amsg" id="sale-msg"></div>
           </div>
@@ -1332,6 +1336,15 @@ const CURRENCIES = {
   USD: { symbol: '$', name: 'US Dollar', flag: '💵', hours: 72 },
 };
 
+const PRICES = {
+  NGN: { amount: 39820,  commission: 19910 },
+  GHS: { amount: 600,    commission: 300   },
+  ZAR: { amount: 460,    commission: 230   },
+  XAF: { amount: 27500,  commission: 13750 },
+  KES: { amount: 3600,   commission: 1800  },
+  USD: { amount: 30,     commission: 15    },
+};
+
 const MILESTONES = [50000, 100000, 250000, 500000, 1000000, 2000000];
 
 let currentUser = null, currentProfile = null, withdrawCooldown = false;
@@ -1408,6 +1421,11 @@ function selectCurrency(el) {
   document.getElementById('sale-currency-prefix').textContent = el.dataset.symbol;
   document.getElementById('comm-currency-prefix').textContent =
     selectedSaleAgent ? (CURRENCIES[selectedSaleAgent.currency]?.symbol || '₦') : '₦';
+  const price = PRICES[selectedCurrency];
+  if (price) {
+    document.getElementById('adm-sale').value = price.amount;
+    document.getElementById('adm-comm').value = price.commission;
+  }
 }
 
 // ── PWA ──
@@ -2197,8 +2215,9 @@ async function _processEntry() {
   const custEmail = document.getElementById('sale-customer-email').value.trim();
   const custPhone = document.getElementById('sale-customer-phone').value.trim();
   const msg = document.getElementById('sale-msg');
+  const qty = Math.max(1, parseInt(document.getElementById('sale-qty')?.value || '1', 10) || 1);
   if (!prod || !saleAmt || !comm) { msg.className = 'amsg err'; msg.textContent = 'Fill in all sale details.'; return; }
-  if (selectedSaleAgent.stacks_remaining <= 0) { msg.className = 'amsg err'; msg.textContent = '⚠️ Agent has 0 stacks. Update stacks first.'; return; }
+  if ((selectedSaleAgent.stacks_remaining || 0) < qty) { msg.className = 'amsg err'; msg.textContent = `⚠️ Agent only has ${selectedSaleAgent.stacks_remaining} stack(s). Reduce quantity or update stacks first.`; return; }
   const btn = document.getElementById('btn-record-sale');
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Recording...';
 
@@ -2211,38 +2230,42 @@ async function _processEntry() {
       const { error: upErr } = await sb.storage.from('receipts').upload(path, file, { upsert: true });
       if (!upErr) { const { data: ud } = sb.storage.from('receipts').getPublicUrl(path); screenshotUrl = ud?.publicUrl || null; }
     }
-    const { error: saleErr } = await sb.from('sales').insert({
-      agent_id: selectedSaleAgent.id,
-      product_name: prod,
-      sale_amount: saleAmt,
-      commission: comm,
-      sale_currency: selectedCurrency,
-      settlement_hours: selectedSettlementHours,
-      settled: false,
-      screenshot_url: screenshotUrl || null,
-      customer_email: custEmail || null,
-      customer_phone: custPhone || null,
-    });
-    if (saleErr) throw new Error(saleErr.message);
-    const newStacks = Math.max(0, (selectedSaleAgent.stacks_remaining || 0) - 1);
+    for (let i = 0; i < qty; i++) {
+      const { error: saleErr } = await sb.from('sales').insert({
+        agent_id: selectedSaleAgent.id,
+        product_name: prod,
+        sale_amount: saleAmt,
+        commission: comm,
+        sale_currency: selectedCurrency,
+        settlement_hours: selectedSettlementHours,
+        settled: false,
+        screenshot_url: screenshotUrl || null,
+        customer_email: custEmail || null,
+        customer_phone: custPhone || null,
+      });
+      if (saleErr) throw new Error(saleErr.message);
+    }
+    const newStacks = Math.max(0, (selectedSaleAgent.stacks_remaining || 0) - qty);
     await sb.from('profiles').update({ stacks_remaining: newStacks }).eq('id', selectedSaleAgent.id);
     const { data: adminP2 } = await sb.from('profiles').select('stacks_allocated').eq('is_admin', true).maybeSingle();
     if (adminP2 && adminP2.stacks_allocated > 0) {
-      await sb.from('profiles').update({ stacks_allocated: adminP2.stacks_allocated - 1 }).eq('is_admin', true);
+      await sb.from('profiles').update({ stacks_allocated: Math.max(0, adminP2.stacks_allocated - qty) }).eq('is_admin', true);
     }
     const uCurr = CURRENCIES[selectedSaleAgent.currency] || CURRENCIES.NGN;
+    const qtyLabel = qty > 1 ? `${qty} sales` : 'Sale';
     msg.className = 'amsg ok';
-    msg.textContent = `✅ Sale recorded! ${uCurr.symbol}${comm.toLocaleString()} will drop to ${selectedSaleAgent.name}'s wallet in ${selectedSettlementHours}hrs automatically.`;
-    toast(`✅ Sale recorded for ${selectedSaleAgent.name}! Settling in ${selectedSettlementHours}hrs.`);
+    msg.textContent = `✅ ${qtyLabel} recorded! ${uCurr.symbol}${(comm * qty).toLocaleString()} total commission will drop to ${selectedSaleAgent.name}'s wallet in ${selectedSettlementHours}hrs automatically.`;
+    toast(`✅ ${qtyLabel} recorded for ${selectedSaleAgent.name}! Settling in ${selectedSettlementHours}hrs.`);
     selectedSaleAgent = null;
     document.getElementById('sale-selected-agent').style.display = 'none';
     document.getElementById('sale-img-preview').style.display = 'none';
     document.getElementById('sale-img-input').value = '';
     document.getElementById('sale-customer-email').value = '';
     document.getElementById('sale-customer-phone').value = '';
-    document.getElementById('adm-prod').value = '';
-    document.getElementById('adm-sale').value = '';
-    document.getElementById('adm-comm').value = '';
+    document.getElementById('adm-prod').value = 'Tech Stack Swipe File';
+    document.getElementById('adm-sale').value = PRICES[selectedCurrency]?.amount || '';
+    document.getElementById('adm-comm').value = PRICES[selectedCurrency]?.commission || '';
+    document.getElementById('sale-qty').value = '1';
     await _loadCtrl(); _renderGrid1(''); _renderRoster();
   } catch(err) {
     msg.className = 'amsg err';
@@ -2448,15 +2471,30 @@ function showLiveIndicator(msg) {
 }
 
 // ── PUSH NOTIFICATIONS ──
+function _vapidKey(b64url) {
+  const pad = '='.repeat((4 - b64url.length % 4) % 4);
+  const b64 = (b64url + pad).replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+
 async function subscribePush(profileId) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) {
+      await sb.from('push_subscriptions').upsert({
+        profile_id: profileId,
+        subscription: JSON.stringify(existing),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'profile_id' });
+      return;
+    }
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') return;
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: VAPID_PUBLIC
+      applicationServerKey: _vapidKey(VAPID_PUBLIC)
     });
     // Save subscription to Supabase
     await sb.from('push_subscriptions').upsert({
