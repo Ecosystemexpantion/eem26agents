@@ -100,7 +100,7 @@ function pickVideo(category: keyof typeof VIDEOS) {
 }
 
 async function sendEmail(to: string, subject: string, body: string): Promise<void> {
-  if (!to) return;
+  if (!to || !to.trim()) return;
   try {
     await mailer.sendMail({
       from: `"Alex | EEM26" <${Deno.env.get("GMAIL_USER")}>`,
@@ -399,7 +399,13 @@ Deno.serve(async (req) => {
       await sb.from("alex_conversations").delete().eq("lead_id", cl.id);
     }
 
-    // ADMIN DAILY SUMMARY
+    return new Response("ok");
+  } catch (e) {
+    console.error("alex-daily error:", e);
+  }
+
+  // Admin summary always sends — even if the main flow crashed above
+  try {
     const summary = `📊 Alex Daily Summary — ${new Date().toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "short" })}
 
 Messages sent today: ${messagesSent}
@@ -458,10 +464,9 @@ Alex is working. 🤖`;
 
       await sendTelegram(ADMIN_CHAT_ID, weeklyReport);
     }
-
-    return new Response("ok");
-  } catch (e) {
-    console.error("alex-daily error:", e);
-    return new Response("error", { status: 500 });
+  } catch (summaryErr) {
+    console.error("Admin summary failed:", summaryErr);
   }
+
+  return new Response("ok");
 });
