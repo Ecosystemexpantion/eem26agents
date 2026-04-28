@@ -181,16 +181,18 @@ FORMAT: First line SUBJECT: then body. First name only. Max 6 sentences REMINDER
 Deno.serve(async (req) => {
   const dayOfWeek = getDayOfWeek();
   let messagesSent = 0;
-  let totalActive = 0;
   let hotLeadsToday = 0;
   let convictionLeadsToday = 0;
   let reengagedToday = 0;
+  let isLastBatch = true;
 
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const trainingLive = body.training_live === true;
     const broadcastMsg = body.broadcast as string | undefined;
     const checkPending = !!body.check_pending;
+    const offset = (body.offset as number) || 0;
+    const chainBatch = 100;
 
     // PENDING FOLLOW-UP CHECK MODE
     if (checkPending) {
@@ -278,8 +280,8 @@ Deno.serve(async (req) => {
       return new Response("ok");
     }
 
-    // MONDAY: upgrade REGISTERED leads who attended last Sunday → ATTENDED
-    if (dayOfWeek === "Monday") {
+    // MONDAY: upgrade REGISTERED leads who attended last Sunday → ATTENDED (first batch only)
+    if (dayOfWeek === "Monday" && offset === 0) {
       const lastSunday = new Date(getNigeriaDate());
       lastSunday.setUTCDate(lastSunday.getUTCDate() - 1);
       lastSunday.setUTCHours(19, 0, 0, 0);
@@ -290,7 +292,8 @@ Deno.serve(async (req) => {
         .lt("registered_at", lastSunday.toISOString());
     }
 
-    // RE-ENGAGEMENT: COLD leads that went cold 30-60 days ago
+    // RE-ENGAGEMENT: COLD leads that went cold 30-60 days ago (first batch only)
+    if (offset === 0) {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
     const { data: coldLeads } = await sb
@@ -330,14 +333,15 @@ Deno.serve(async (req) => {
         console.error(`Re-engage failed for ${lead.id}:`, e);
       }
     }
+    } // end offset === 0 block
 
-    // DAILY FOLLOW-UP: all active leads — processed in parallel batches of 10
+    // DAILY FOLLOW-UP: paginated — 100 leads per invocation, self-chains to next batch
     const { data: leads } = await sb
       .from("alex_leads")
       .select("*")
-      .in("status", ["REGISTERED", "ATTENDED"]);
-
-    totalActive = (leads || []).length;
+      .in("status", ["REGISTERED", "ATTENDED"])
+      .order("id")
+      .range(offset, offset + chainBatch - 1);
 
     const processLead = async (lead: Record<string, unknown>) => {
       if (!lead.name) return;
@@ -374,9 +378,24 @@ Deno.serve(async (req) => {
     };
 
     const allLeads = (leads || []) as Record<string, unknown>[];
+    isLastBatch = allLeads.length < chainBatch;
+
     const batchSize = 15;
     for (let i = 0; i < allLeads.length; i += batchSize) {
       await Promise.all(allLeads.slice(i, i + batchSize).map(processLead));
+    }
+
+    // Trigger next batch if there are more leads to process
+    if (!isLastBatch) {
+      fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/alex-daily`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ offset: offset + chainBatch }),
+      }).catch(e => console.error("Chain trigger failed:", e));
+      return new Response("ok");
     }
 
     // Mark cold/unknown interest ATTENDED leads as COLD after 7 days
@@ -410,14 +429,21 @@ Deno.serve(async (req) => {
     console.error("alex-daily error:", e);
   }
 
-  // Admin summary always sends — even if the main flow crashed above
+  // Admin summary — only on last batch, queries DB for accurate cross-batch totals
+  if (isLastBatch) {
   try {
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    const [
+      { count: todayCount },
+      { count: activeCount },
+    ] = await Promise.all([
+      sb.from("alex_leads").select("*", { count: "exact", head: true }).gte("last_contacted_at", threeHoursAgo),
+      sb.from("alex_leads").select("*", { count: "exact", head: true }).in("status", ["REGISTERED", "ATTENDED"]),
+    ]);
     const summary = `📊 Alex Daily Summary — ${new Date().toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "short" })}
 
-Messages sent today: ${messagesSent}
-Total active leads: ${totalActive}
-Hot leads in system: ${hotLeadsToday}
-In conviction phase: ${convictionLeadsToday}
+Messages sent today: ${todayCount || 0}
+Total active leads: ${activeCount || 0}
 Re-engaged cold leads: ${reengagedToday}
 
 Alex is running. 🤖`;
@@ -473,6 +499,7 @@ Alex is working. 🤖`;
   } catch (summaryErr) {
     console.error("Admin summary failed:", summaryErr);
   }
+  } // end isLastBatch block
 
   return new Response("ok");
 });
