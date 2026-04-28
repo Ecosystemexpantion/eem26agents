@@ -349,7 +349,7 @@ Deno.serve(async (req) => {
       try {
         const res = await claude.messages.create({
           model: "claude-haiku-4-5-20251001",
-          max_tokens: 400,
+          max_tokens: 300,
           system: buildCopyPrompt(lead, phase, day_number, dayOfWeek),
           messages: [{ role: "user", content: "Write the follow-up message now." }],
         });
@@ -364,7 +364,7 @@ Deno.serve(async (req) => {
         if (phase === "FOLLOWUP" || phase === "CONVICTION") {
           const category = day_number % 2 === 1 ? "withdrawal" : "testimony";
           const vid = pickVideo(category);
-          await sendVideo(lead.telegram_chat_id as string, vid.fileId, vid.caption);
+          sendVideo(lead.telegram_chat_id as string, vid.fileId, vid.caption).catch(() => {});
         }
         await sb.from("alex_leads").update({ last_contacted_at: new Date().toISOString() }).eq("id", lead.id);
         messagesSent++;
