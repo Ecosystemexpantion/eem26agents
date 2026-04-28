@@ -387,7 +387,7 @@ Deno.serve(async (req) => {
 
     // Trigger next batch if there are more leads to process
     if (!isLastBatch) {
-      fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/alex-daily`, {
+      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/alex-daily`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
