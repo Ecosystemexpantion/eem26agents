@@ -385,9 +385,9 @@ Deno.serve(async (req) => {
       await Promise.all(allLeads.slice(i, i + batchSize).map(processLead));
     }
 
-    // Trigger next batch if there are more leads to process
+    // Trigger next batch — fire and forget with 1s grace period so request sends before return
     if (!isLastBatch) {
-      await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/alex-daily`, {
+      fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/alex-daily`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
@@ -395,6 +395,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({ offset: offset + chainBatch }),
       }).catch(e => console.error("Chain trigger failed:", e));
+      await new Promise(r => setTimeout(r, 1000));
       return new Response("ok");
     }
 
