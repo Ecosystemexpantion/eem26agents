@@ -179,12 +179,18 @@ FORMAT: First line SUBJECT: then body. First name only. Max 6 sentences REMINDER
 }
 
 Deno.serve(async (req) => {
+  const dayOfWeek = getDayOfWeek();
+  let messagesSent = 0;
+  let totalActive = 0;
+  let hotLeadsToday = 0;
+  let convictionLeadsToday = 0;
+  let reengagedToday = 0;
+
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>;
     const trainingLive = body.training_live === true;
     const broadcastMsg = body.broadcast as string | undefined;
     const checkPending = !!body.check_pending;
-    const dayOfWeek = getDayOfWeek();
 
     // PENDING FOLLOW-UP CHECK MODE
     if (checkPending) {
@@ -300,11 +306,6 @@ Deno.serve(async (req) => {
       .lt("followup_started_at", fourteenDaysAgo)
       .in("interest_level", ["hot", "warm"]);
 
-    let messagesSent = 0;
-    let hotLeadsToday = 0;
-    let convictionLeadsToday = 0;
-    let reengagedToday = 0;
-
     // RE-ENGAGEMENT: COLD leads that went cold 30-60 days ago
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
@@ -352,7 +353,7 @@ Deno.serve(async (req) => {
       .select("*")
       .in("status", ["REGISTERED", "ATTENDED"]);
 
-    const totalActive = (leads || []).length;
+    totalActive = (leads || []).length;
 
     for (const lead of leads || []) {
       if (!lead.name) continue;
@@ -399,7 +400,6 @@ Deno.serve(async (req) => {
       await sb.from("alex_conversations").delete().eq("lead_id", cl.id);
     }
 
-    return new Response("ok");
   } catch (e) {
     console.error("alex-daily error:", e);
   }
