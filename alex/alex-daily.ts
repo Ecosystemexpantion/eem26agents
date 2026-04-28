@@ -347,7 +347,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // DAILY FOLLOW-UP: all active leads
+    // DAILY FOLLOW-UP: all active leads — processed in parallel batches of 10
     const { data: leads } = await sb
       .from("alex_leads")
       .select("*")
@@ -355,10 +355,10 @@ Deno.serve(async (req) => {
 
     totalActive = (leads || []).length;
 
-    for (const lead of leads || []) {
-      if (!lead.name) continue;
-      const { phase, day_number } = getPhaseAndDay(lead as Record<string, unknown>, dayOfWeek);
-      if (phase === "SKIP") continue;
+    const processLead = async (lead: Record<string, unknown>) => {
+      if (!lead.name) return;
+      const { phase, day_number } = getPhaseAndDay(lead, dayOfWeek);
+      if (phase === "SKIP") return;
       if (lead.interest_level === "hot") hotLeadsToday++;
       if (phase === "CONVICTION") convictionLeadsToday++;
 
@@ -366,7 +366,7 @@ Deno.serve(async (req) => {
         const res = await claude.messages.create({
           model: "claude-haiku-4-5-20251001",
           max_tokens: 800,
-          system: buildCopyPrompt(lead as Record<string, unknown>, phase, day_number, dayOfWeek),
+          system: buildCopyPrompt(lead, phase, day_number, dayOfWeek),
           messages: [{ role: "user", content: "Write the follow-up message now." }],
         });
 
@@ -387,6 +387,12 @@ Deno.serve(async (req) => {
       } catch (e) {
         console.error(`Failed lead ${lead.id}:`, e);
       }
+    };
+
+    const allLeads = (leads || []) as Record<string, unknown>[];
+    const batchSize = 10;
+    for (let i = 0; i < allLeads.length; i += batchSize) {
+      await Promise.all(allLeads.slice(i, i + batchSize).map(processLead));
     }
 
     // Cleanup old cold conversation history
