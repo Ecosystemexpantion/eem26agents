@@ -349,7 +349,7 @@ Deno.serve(async (req) => {
       try {
         const res = await claude.messages.create({
           model: "claude-haiku-4-5-20251001",
-          max_tokens: 800,
+          max_tokens: 400,
           system: buildCopyPrompt(lead, phase, day_number, dayOfWeek),
           messages: [{ role: "user", content: "Write the follow-up message now." }],
         });
@@ -360,7 +360,7 @@ Deno.serve(async (req) => {
         const msgBody = cleanText(fullText.replace(/^SUBJECT:.+\n?/m, "").trim());
 
         await sendTelegram(lead.telegram_chat_id as string, msgBody);
-        if (lead.email) await sendEmail(lead.email as string, subject, msgBody);
+        sendEmail(lead.email as string, subject, msgBody).catch(() => {});
         if (phase === "FOLLOWUP" || phase === "CONVICTION") {
           const category = day_number % 2 === 1 ? "withdrawal" : "testimony";
           const vid = pickVideo(category);
@@ -374,7 +374,7 @@ Deno.serve(async (req) => {
     };
 
     const allLeads = (leads || []) as Record<string, unknown>[];
-    const batchSize = 10;
+    const batchSize = 20;
     for (let i = 0; i < allLeads.length; i += batchSize) {
       await Promise.all(allLeads.slice(i, i + batchSize).map(processLead));
     }
