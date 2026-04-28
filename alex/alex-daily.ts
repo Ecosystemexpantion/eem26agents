@@ -290,22 +290,6 @@ Deno.serve(async (req) => {
         .lt("registered_at", lastSunday.toISOString());
     }
 
-    // Mark cold/unknown interest ATTENDED leads as COLD after 7 days
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
-    await sb.from("alex_leads")
-      .update({ status: "COLD" })
-      .eq("status", "ATTENDED")
-      .lt("followup_started_at", sevenDaysAgo)
-      .or("interest_level.eq.cold,interest_level.is.null");
-
-    // Mark hot/warm ATTENDED leads as COLD after 14 days (7 followup + 7 conviction)
-    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
-    await sb.from("alex_leads")
-      .update({ status: "COLD" })
-      .eq("status", "ATTENDED")
-      .lt("followup_started_at", fourteenDaysAgo)
-      .in("interest_level", ["hot", "warm"]);
-
     // RE-ENGAGEMENT: COLD leads that went cold 30-60 days ago
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString();
@@ -394,6 +378,22 @@ Deno.serve(async (req) => {
     for (let i = 0; i < allLeads.length; i += batchSize) {
       await Promise.all(allLeads.slice(i, i + batchSize).map(processLead));
     }
+
+    // Mark cold/unknown interest ATTENDED leads as COLD after 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+    await sb.from("alex_leads")
+      .update({ status: "COLD" })
+      .eq("status", "ATTENDED")
+      .lt("followup_started_at", sevenDaysAgo)
+      .or("interest_level.eq.cold,interest_level.is.null");
+
+    // Mark hot/warm ATTENDED leads as COLD after 14 days (7 followup + 7 conviction)
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
+    await sb.from("alex_leads")
+      .update({ status: "COLD" })
+      .eq("status", "ATTENDED")
+      .lt("followup_started_at", fourteenDaysAgo)
+      .in("interest_level", ["hot", "warm"]);
 
     // Cleanup old cold conversation history
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
