@@ -366,7 +366,7 @@ Deno.serve(async (req) => {
           const vid = pickVideo(category);
           await sendVideo(lead.telegram_chat_id as string, vid.fileId, vid.caption);
         }
-        await sb.from("alex_leads").update({ last_contacted_at: new Date().toISOString() }).eq("id", lead.id);
+        sb.from("alex_leads").update({ last_contacted_at: new Date().toISOString() }).eq("id", lead.id).then(() => {});
         messagesSent++;
       } catch (e) {
         console.error(`Failed lead ${lead.id}:`, e);
@@ -374,7 +374,7 @@ Deno.serve(async (req) => {
     };
 
     const allLeads = (leads || []) as Record<string, unknown>[];
-    const batchSize = 20;
+    const batchSize = 50;
     for (let i = 0; i < allLeads.length; i += batchSize) {
       await Promise.all(allLeads.slice(i, i + batchSize).map(processLead));
     }
