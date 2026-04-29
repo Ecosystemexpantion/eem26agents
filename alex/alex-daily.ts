@@ -194,7 +194,7 @@ Deno.serve(async (req) => {
     const broadcastMsg = body.broadcast as string | undefined;
     const checkPending = !!body.check_pending;
     const offset = (body.offset as number) || 0;
-    const chainBatch = 100;
+    const chainBatch = 50;
 
     // PENDING FOLLOW-UP CHECK MODE
     if (checkPending) {
@@ -383,7 +383,7 @@ Deno.serve(async (req) => {
     const allLeads = (leads || []) as Record<string, unknown>[];
     isLastBatch = allLeads.length < chainBatch;
 
-    const batchSize = 5;
+    const batchSize = 3;
     for (let i = 0; i < allLeads.length; i += batchSize) {
       await Promise.all(allLeads.slice(i, i + batchSize).map(processLead));
       await new Promise(r => setTimeout(r, 2000));
