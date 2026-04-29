@@ -12,6 +12,8 @@ const ADMIN_CHAT_ID = "5870771695";
 
 const mailer = nodemailer.createTransport({
   service: "gmail",
+  pool: true,
+  maxConnections: 1,
   auth: {
     user: Deno.env.get("GMAIL_USER"),
     pass: Deno.env.get("GMAIL_APP_PASSWORD"),
@@ -340,11 +342,12 @@ Deno.serve(async (req) => {
       .from("alex_leads")
       .select("*")
       .in("status", ["REGISTERED", "ATTENDED"])
+      .not("telegram_chat_id", "is", null)
       .order("id")
       .range(offset, offset + chainBatch - 1);
 
     const processLead = async (lead: Record<string, unknown>) => {
-      if (!lead.name) return;
+      if (!lead.name || !lead.telegram_chat_id) return;
       const { phase, day_number } = getPhaseAndDay(lead, dayOfWeek);
       if (phase === "SKIP") return;
       if (lead.interest_level === "hot") hotLeadsToday++;
