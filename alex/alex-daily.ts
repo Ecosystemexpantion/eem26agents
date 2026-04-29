@@ -385,17 +385,19 @@ Deno.serve(async (req) => {
       await Promise.all(allLeads.slice(i, i + batchSize).map(processLead));
     }
 
-    // Trigger next batch — fire and forget with 1s grace period so request sends before return
+    // Trigger next batch — await fetch just to log status, gateway responds 200 immediately
     if (!isLastBatch) {
-      fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/alex-daily`, {
+      console.log(`[chain] Firing next batch at offset ${offset + chainBatch}`);
+      const chainRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/alex-daily`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ offset: offset + chainBatch }),
-      }).catch(e => console.error("Chain trigger failed:", e));
-      await new Promise(r => setTimeout(r, 1000));
+      }).catch(e => { console.error("Chain trigger failed:", e); return null; });
+      console.log(`[chain] Trigger response status: ${chainRes?.status ?? "error"}`);
+      await new Promise(r => setTimeout(r, 2000));
       return new Response("ok");
     }
 

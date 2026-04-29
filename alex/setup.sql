@@ -48,26 +48,28 @@ create trigger trg_alex_leads_updated_at
   before update on alex_leads
   for each row execute function update_alex_leads_updated_at();
 
--- Cron jobs (replace YOUR_SERVICE_ROLE_KEY below with your Supabase service role key)
+-- Cron jobs — run this block in Supabase SQL Editor to register/update scheduled jobs
+select cron.unschedule('alex-daily-8am');
 select cron.schedule(
   'alex-daily-8am',
   '0 7 * * *',
   $$
   select net.http_post(
     url := 'https://jebixaluhhuidxmnlgit.supabase.co/functions/v1/alex-daily',
-    headers := '{"Content-Type":"application/json","Authorization":"Bearer YOUR_SERVICE_ROLE_KEY"}'::jsonb,
+    headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplYml4YWx1aGh1aWR4bW5sZ2l0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTA3MDAsImV4cCI6MjA5MDc4NjcwMH0.5e9f1H2aD9c50cY7JAL4pKnacbaEQk1JmlSHQECS1hs'),
     body := '{}'::jsonb
   );
   $$
 );
 
+select cron.unschedule('alex-training-live');
 select cron.schedule(
   'alex-training-live',
   '45 18 * * 0',
   $$
   select net.http_post(
     url := 'https://jebixaluhhuidxmnlgit.supabase.co/functions/v1/alex-daily',
-    headers := '{"Content-Type":"application/json","Authorization":"Bearer YOUR_SERVICE_ROLE_KEY"}'::jsonb,
+    headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplYml4YWx1aGh1aWR4bW5sZ2l0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTA3MDAsImV4cCI6MjA5MDc4NjcwMH0.5e9f1H2aD9c50cY7JAL4pKnacbaEQk1JmlSHQECS1hs'),
     body := '{"training_live":true}'::jsonb
   );
   $$
