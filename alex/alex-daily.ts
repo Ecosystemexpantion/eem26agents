@@ -391,7 +391,7 @@ Deno.serve(async (req) => {
       const chainRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/alex-daily`, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImplYml4YWx1aGh1aWR4bW5sZ2l0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTA3MDAsImV4cCI6MjA5MDc4NjcwMH0.5e9f1H2aD9c50cY7JAL4pKnacbaEQk1JmlSHQECS1hs",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ offset: offset + chainBatch }),
