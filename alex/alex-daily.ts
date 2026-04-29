@@ -383,6 +383,7 @@ Deno.serve(async (req) => {
     const batchSize = 5;
     for (let i = 0; i < allLeads.length; i += batchSize) {
       await Promise.all(allLeads.slice(i, i + batchSize).map(processLead));
+      await new Promise(r => setTimeout(r, 2000));
     }
 
     // Trigger next batch — await fetch just to log status, gateway responds 200 immediately
