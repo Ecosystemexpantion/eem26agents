@@ -380,7 +380,7 @@ Deno.serve(async (req) => {
     const allLeads = (leads || []) as Record<string, unknown>[];
     isLastBatch = allLeads.length < chainBatch;
 
-    const batchSize = 15;
+    const batchSize = 5;
     for (let i = 0; i < allLeads.length; i += batchSize) {
       await Promise.all(allLeads.slice(i, i + batchSize).map(processLead));
     }
