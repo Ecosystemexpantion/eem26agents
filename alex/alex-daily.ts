@@ -120,7 +120,11 @@ async function sendEmail(to: string, subject: string, body: string, idx = 0): Pr
 }
 
 function cleanText(text: string): string {
-  return text
+  // Strip internal metadata header Claude sometimes prepends before the real message
+  // Pattern: one or two summary lines followed by "---"
+  const withoutMeta = text.replace(/^[\s\S]{0,300}?---\n+/, "").trim();
+  const cleaned = withoutMeta || text;
+  return cleaned
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
     .trim();
@@ -360,7 +364,7 @@ Deno.serve(async (req) => {
       try {
         const res = await claude.messages.create({
           model: "claude-haiku-4-5-20251001",
-          max_tokens: 300,
+          max_tokens: 450,
           system: buildCopyPrompt(lead, phase, day_number, dayOfWeek),
           messages: [{ role: "user", content: "Write the follow-up message now." }],
         });
