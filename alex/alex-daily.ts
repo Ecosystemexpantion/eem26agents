@@ -10,15 +10,14 @@ const claude = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
 const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
 const ADMIN_CHAT_ID = "5870771695";
 
-const mailer = nodemailer.createTransport({
-  service: "gmail",
-  pool: true,
-  maxConnections: 1,
-  auth: {
-    user: Deno.env.get("GMAIL_USER"),
-    pass: Deno.env.get("GMAIL_APP_PASSWORD"),
-  },
-});
+const GMAIL_ACCOUNTS = [
+  { user: Deno.env.get("GMAIL_USER")!, pass: Deno.env.get("GMAIL_APP_PASSWORD")! },
+  { user: Deno.env.get("GMAIL_USER_2") || "", pass: Deno.env.get("GMAIL_APP_PASSWORD_2") || "" },
+].filter(a => a.user && a.pass);
+
+const mailers = GMAIL_ACCOUNTS.map(a =>
+  nodemailer.createTransport({ service: "gmail", auth: { user: a.user, pass: a.pass } })
+);
 
 function getNigeriaDate(): Date {
   return new Date(Date.now() + 3600 * 1000);
@@ -101,17 +100,22 @@ function pickVideo(category: keyof typeof VIDEOS) {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-async function sendEmail(to: string, subject: string, body: string): Promise<void> {
-  if (!to || !to.trim()) return;
+async function sendEmail(to: string, subject: string, body: string, idx = 0): Promise<void> {
+  if (!to || !to.trim() || idx >= mailers.length) return;
   try {
-    await mailer.sendMail({
-      from: `"Alex | EEM26" <${Deno.env.get("GMAIL_USER")}>`,
+    await mailers[idx].sendMail({
+      from: `"Alex | EEM26" <${GMAIL_ACCOUNTS[idx].user}>`,
       to,
       subject,
       text: body,
     });
-  } catch (e) {
-    console.error("Email failed:", e);
+  } catch (e: unknown) {
+    const msg = String((e as { message?: string })?.message || e);
+    if (msg.includes("Daily") || msg.includes("550") || msg.includes("sending limit")) {
+      await sendEmail(to, subject, body, idx + 1); // rotate to next Gmail account
+    } else {
+      console.error("Email failed:", e);
+    }
   }
 }
 
@@ -367,7 +371,10 @@ Deno.serve(async (req) => {
         const msgBody = cleanText(fullText.replace(/^SUBJECT:.+\n?/m, "").trim());
 
         await sendTelegram(lead.telegram_chat_id as string, msgBody);
-        sendEmail(lead.email as string, subject, msgBody).catch(() => {});
+        const daysInFollowup = daysSince((lead.followup_started_at || lead.attended_at) as string);
+        if (daysInFollowup < 14) {
+          sendEmail(lead.email as string, subject, msgBody).catch(() => {});
+        }
         if (phase === "FOLLOWUP" || phase === "CONVICTION") {
           const category = day_number % 2 === 1 ? "withdrawal" : "testimony";
           const vid = pickVideo(category);
