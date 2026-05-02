@@ -376,8 +376,11 @@ Deno.serve(async (req) => {
 
         await sendTelegram(lead.telegram_chat_id as string, msgBody);
         const daysInFollowup = daysSince((lead.followup_started_at || lead.attended_at) as string);
+        const now = new Date().toISOString();
         if (daysInFollowup < 14) {
-          sendEmail(lead.email as string, subject, msgBody).catch(() => {});
+          sendEmail(lead.email as string, subject, msgBody)
+            .then(() => sb.from("alex_leads").update({ last_email_sent_at: now }).eq("id", lead.id))
+            .catch(() => {});
         }
         if (phase === "FOLLOWUP" || phase === "CONVICTION") {
           const category = day_number % 2 === 1 ? "withdrawal" : "testimony";

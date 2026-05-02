@@ -246,43 +246,70 @@ Deno.serve(async (req) => {
     if (chatId === ADMIN_CHAT_ID && msg.text) {
       const question = userText;
       const todayISO = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+      const weekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
 
       const [
         { data: allLeads },
         { data: objLeads },
         { data: recentConvs },
+        { data: pendingLeads },
+        { data: purchases },
       ] = await Promise.all([
-        sb.from("alex_leads").select("name, status, country, interest_level, objections_raised, created_at, last_contacted_at"),
+        sb.from("alex_leads").select("id, name, status, country, interest_level, objections_raised, created_at, last_contacted_at, last_email_sent_at, followup_started_at"),
         sb.from("alex_leads").select("name, objections_raised, updated_at").not("objections_raised", "is", null).order("updated_at", { ascending: false }).limit(20),
         sb.from("alex_conversations").select("lead_id, role, message, created_at").order("created_at", { ascending: false }).limit(30),
+        sb.from("alex_leads").select("name, pending_followup_at").not("pending_followup_at", "is", null),
+        sb.from("alex_leads").select("name, country, updated_at").eq("status", "PURCHASED").order("updated_at", { ascending: false }).limit(20),
       ]);
 
       const counts: Record<string, number> = {};
-      for (const l of allLeads || []) counts[l.status] = (counts[l.status] || 0) + 1;
+      const countryCounts: Record<string, number> = {};
+      for (const l of allLeads || []) {
+        counts[l.status] = (counts[l.status] || 0) + 1;
+        if (l.country) countryCounts[l.country] = (countryCounts[l.country] || 0) + 1;
+      }
+      const topCountries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([c, n]) => `${c}: ${n}`).join(", ");
 
       const contactedToday = (allLeads || []).filter(l => l.last_contacted_at && l.last_contacted_at >= todayISO);
+      const emailsSentToday = (allLeads || []).filter(l => l.last_email_sent_at && l.last_email_sent_at >= todayISO);
       const newToday = (allLeads || []).filter(l => l.created_at >= todayISO);
+      const newThisWeek = (allLeads || []).filter(l => l.created_at >= weekAgo);
       const hotLeads = (allLeads || []).filter(l => l.interest_level === "hot");
+      const warmLeads = (allLeads || []).filter(l => l.interest_level === "warm");
+      const notContactedToday = (allLeads || []).filter(l => l.status === "ATTENDED" && (!l.last_contacted_at || l.last_contacted_at < todayISO));
+      const total = (allLeads || []).length;
+      const convRate = total > 0 ? (((purchases || []).length / total) * 100).toFixed(1) : "0";
       const lastContacted = (allLeads || []).filter(l => l.last_contacted_at).sort((a, b) => b.last_contacted_at!.localeCompare(a.last_contacted_at!));
       const lastMessaged = recentConvs?.find(c => c.role === "user");
       const lastLeadId = lastMessaged?.lead_id;
-      const lastLead = lastLeadId ? (allLeads || []).find(l => (l as Record<string, unknown>).id === lastLeadId) : null;
+      const lastLead = lastLeadId ? (allLeads || []).find(l => l.id === lastLeadId) : null;
+      const objsToday = (objLeads || []).filter(l => l.updated_at >= todayISO);
 
       const snapshot = `
 STATUS COUNTS: ${JSON.stringify(counts)}
-TOTAL LEADS: ${(allLeads || []).length}
-CONTACTED TODAY: ${contactedToday.length} — names: ${contactedToday.slice(0, 10).map(l => l.name).join(", ")}
-NEW LEADS TODAY: ${newToday.length} — names: ${newToday.map(l => l.name).join(", ")}
+TOTAL LEADS: ${total}
+CONVERSION RATE: ${convRate}% (${(purchases || []).length} purchased out of ${total})
+CONTACTED TODAY (Telegram): ${contactedToday.length}
+EMAILS SENT TODAY: ${emailsSentToday.length}
+NEW LEADS TODAY: ${newToday.length} — ${newToday.map(l => `${l.name} (${l.country})`).join(", ")}
+NEW LEADS THIS WEEK: ${newThisWeek.length}
 HOT LEADS: ${hotLeads.map(l => `${l.name} (${l.country})`).join(", ")}
+WARM LEADS COUNT: ${warmLeads.length}
+ATTENDED BUT NOT CONTACTED TODAY: ${notContactedToday.length} leads
+PENDING FOLLOW-UPS: ${(pendingLeads || []).map(l => l.name).join(", ") || "none"}
 LAST PERSON CONTACTED: ${lastContacted[0]?.name ?? "unknown"} at ${lastContacted[0]?.last_contacted_at}
-LAST PERSON WHO MESSAGED: ${lastLead ? (lastLead as Record<string, unknown>).name : "unknown"}
-RECENT OBJECTIONS: ${objLeads?.map(l => `${l.name}: "${l.objections_raised}"`).join(" | ")}
-LAST 30 MESSAGES (newest first): ${recentConvs?.map(c => `[${c.role}] ${String(c.message).slice(0, 60)}`).join(" | ")}
+LAST PERSON WHO MESSAGED: ${lastLead?.name ?? "unknown"}
+PURCHASES (all time): ${(purchases || []).map(l => `${l.name} (${l.country})`).join(", ")}
+PURCHASES THIS WEEK: ${(purchases || []).filter(l => l.updated_at >= weekAgo).map(l => l.name).join(", ") || "none"}
+OBJECTIONS TODAY: ${objsToday.length} — ${objsToday.map(l => `${l.name}: "${l.objections_raised}"`).join(" | ")}
+ALL OBJECTIONS (recent): ${(objLeads || []).slice(0, 10).map(l => `${l.name}: "${l.objections_raised}"`).join(" | ")}
+TOP COUNTRIES: ${topCountries}
+LAST 30 MESSAGES: ${recentConvs?.map(c => `[${c.role}] ${String(c.message).slice(0, 60)}`).join(" | ")}
 `.trim();
 
       const ans = await claude.messages.create({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 300,
+        max_tokens: 400,
         system: `You are the admin dashboard for Alex sales bot. Answer the admin's question using ONLY the data below. Be concise, plain text, no markdown. If the data doesn't have the answer say so.\n\nDATA:\n${snapshot}`,
         messages: [{ role: "user", content: question }],
       });
