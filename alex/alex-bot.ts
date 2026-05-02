@@ -242,6 +242,55 @@ Deno.serve(async (req) => {
       return new Response("ok");
     }
 
+    // Admin sends a text question → answer with live DB data
+    if (chatId === ADMIN_CHAT_ID && msg.text) {
+      const question = userText;
+      const todayISO = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+
+      const [
+        { data: allLeads },
+        { data: objLeads },
+        { data: recentConvs },
+      ] = await Promise.all([
+        sb.from("alex_leads").select("name, status, country, interest_level, objections_raised, created_at, last_contacted_at"),
+        sb.from("alex_leads").select("name, objections_raised, updated_at").not("objections_raised", "is", null).order("updated_at", { ascending: false }).limit(20),
+        sb.from("alex_conversations").select("lead_id, role, message, created_at").order("created_at", { ascending: false }).limit(30),
+      ]);
+
+      const counts: Record<string, number> = {};
+      for (const l of allLeads || []) counts[l.status] = (counts[l.status] || 0) + 1;
+
+      const contactedToday = (allLeads || []).filter(l => l.last_contacted_at && l.last_contacted_at >= todayISO);
+      const newToday = (allLeads || []).filter(l => l.created_at >= todayISO);
+      const hotLeads = (allLeads || []).filter(l => l.interest_level === "hot");
+      const lastContacted = (allLeads || []).filter(l => l.last_contacted_at).sort((a, b) => b.last_contacted_at!.localeCompare(a.last_contacted_at!));
+      const lastMessaged = recentConvs?.find(c => c.role === "user");
+      const lastLeadId = lastMessaged?.lead_id;
+      const lastLead = lastLeadId ? (allLeads || []).find(l => (l as Record<string, unknown>).id === lastLeadId) : null;
+
+      const snapshot = `
+STATUS COUNTS: ${JSON.stringify(counts)}
+TOTAL LEADS: ${(allLeads || []).length}
+CONTACTED TODAY: ${contactedToday.length} — names: ${contactedToday.slice(0, 10).map(l => l.name).join(", ")}
+NEW LEADS TODAY: ${newToday.length} — names: ${newToday.map(l => l.name).join(", ")}
+HOT LEADS: ${hotLeads.map(l => `${l.name} (${l.country})`).join(", ")}
+LAST PERSON CONTACTED: ${lastContacted[0]?.name ?? "unknown"} at ${lastContacted[0]?.last_contacted_at}
+LAST PERSON WHO MESSAGED: ${lastLead ? (lastLead as Record<string, unknown>).name : "unknown"}
+RECENT OBJECTIONS: ${objLeads?.map(l => `${l.name}: "${l.objections_raised}"`).join(" | ")}
+LAST 30 MESSAGES (newest first): ${recentConvs?.map(c => `[${c.role}] ${String(c.message).slice(0, 60)}`).join(" | ")}
+`.trim();
+
+      const ans = await claude.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 300,
+        system: `You are the admin dashboard for Alex sales bot. Answer the admin's question using ONLY the data below. Be concise, plain text, no markdown. If the data doesn't have the answer say so.\n\nDATA:\n${snapshot}`,
+        messages: [{ role: "user", content: question }],
+      });
+
+      await sendTelegram(ADMIN_CHAT_ID, (ans.content[0] as { type: string; text: string }).text.trim());
+      return new Response("ok");
+    }
+
     let { data: lead } = await sb
       .from("alex_leads")
       .select("*")
