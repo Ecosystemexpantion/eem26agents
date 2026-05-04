@@ -228,8 +228,30 @@ Deno.serve(async (req) => {
     const trainingLive = body.training_live === true;
     const broadcastMsg = body.broadcast as string | undefined;
     const checkPending = !!body.check_pending;
+    const testInviteChatId = body.test_invite_chat_id as string | undefined;
     const offset = (body.offset as number) || 0;
     const chainBatch = 50;
+
+    // TEST MODE: send Wednesday setup invite to one specific lead by chat_id
+    if (testInviteChatId) {
+      const { data: testLead } = await sb.from("alex_leads").select("*").eq("telegram_chat_id", testInviteChatId).single();
+      if (testLead?.name && testLead?.telegram_chat_id) {
+        const res = await claude.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 450,
+          system: buildCopyPrompt(testLead as Record<string, unknown>, "SETUP_INVITE", 1, "Wednesday"),
+          messages: [{ role: "user", content: "Write the follow-up message now." }],
+        });
+        const fullText = (res.content[0] as { type: string; text: string }).text;
+        const msgBody = cleanText(fullText.replace(/^SUBJECT:.+\n?/m, "").trim());
+        await sendTelegram(testLead.telegram_chat_id as string, msgBody);
+        sb.from("alex_conversations").insert({ lead_id: testLead.id, role: "assistant", message: msgBody }).catch(() => {});
+        await sendTelegram(ADMIN_CHAT_ID, `✅ Test setup invite sent to ${testLead.name}`);
+      } else {
+        await sendTelegram(ADMIN_CHAT_ID, `❌ No ATTENDED lead found with chat_id: ${testInviteChatId}`);
+      }
+      return new Response("ok");
+    }
 
     // PENDING FOLLOW-UP CHECK MODE
     if (checkPending) {
