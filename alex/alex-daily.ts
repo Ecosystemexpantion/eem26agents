@@ -33,23 +33,28 @@ function daysSince(dateStr: string | null): number {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24));
 }
 
+function hasScamObjection(lead: Record<string, unknown>): boolean {
+  const obj = ((lead.objections_raised as string) || "").toLowerCase();
+  return ["scam", "fake", "fraud", "419", "not real"].some(w => obj.includes(w));
+}
+
 function getPhaseAndDay(lead: Record<string, unknown>, dayOfWeek: string): { phase: string; day_number: number } {
   if (lead.status === "REGISTERED") {
-    // Urgency engine — distinct message energy for each day of the week
     const dayMap: Record<string, number> = {
-      "Sunday": 1,    // Training TODAY
-      "Monday": 2,    // Just missed it — next Sunday coming
-      "Tuesday": 3,   // Emotional student story
-      "Wednesday": 4, // FOMO — others are moving
-      "Thursday": 5,  // Countdown approaching — 3 days
-      "Friday": 6,    // 2 days away — vivid contrast
-      "Saturday": 7,  // Tomorrow is the day
+      "Sunday": 1, "Monday": 2, "Tuesday": 3, "Wednesday": 4,
+      "Thursday": 5, "Friday": 6, "Saturday": 7,
     };
     return { phase: "REMINDER", day_number: dayMap[dayOfWeek] || 4 };
   }
   if (lead.status === "ATTENDED") {
     const days = daysSince((lead.followup_started_at || lead.attended_at) as string);
-    // Hot/warm leads past day 7 enter CONVICTION phase instead of going cold
+    if (hasScamObjection(lead)) {
+      if (days >= 7) return { phase: "SKIP", day_number: 0 };
+      return { phase: "TRUST_BUILDING", day_number: Math.min(days + 1, 7) };
+    }
+    if (dayOfWeek === "Wednesday") {
+      return { phase: "SETUP_INVITE", day_number: 1 };
+    }
     if (days >= 7 && (lead.interest_level === "hot" || lead.interest_level === "warm")) {
       return { phase: "CONVICTION", day_number: Math.min(days - 6, 7) };
     }
@@ -184,6 +189,27 @@ Open with a NEW student result from their country or matching their pain point �
 Download: https://ecosystemexpantion.github.io/Tech_stack-premium-/` : ""}
 ${phase === "PENDING_CHECK" ? `This lead said they would download and get back but never returned. Send one short friendly check-up message. Remind them briefly about the premium link — it has extra packages not in the regular version including a new setup Coach Victor discovered that boosts sales in 2 days. Create light urgency — this offer won't always be available. Maximum 3 sentences. End with the download link.
 Download: https://ecosystemexpantion.github.io/Tech_stack-premium-/` : ""}
+${phase === "SETUP_INVITE" ? `Your job is to make this lead feel like you are personally ready to start their setup RIGHT NOW. Sound like you have been preparing for them and today is the day. Reference a real student result from their country or matching their pain point. Ask if they are ready to move. ONE question at the end. Short, direct, conversational — like a real person texting them, not a broadcast blast.
+Energy example: "Hey [name], I've been setting things up on my end for you. I want to get you started on your 4-day setup this week — get you earning like [student from their country who made ₦X]. Are you ready to move?" No links. No hard sell. Just energy and one direct question.` : ""}
+${phase === "TRUST_BUILDING" ? `This lead said: "${lead.objections_raised}". They don't fully understand what they're buying — that's the real problem. Your job is NOT to defend against their concern. Your job is to open their eyes to what ₦39,820 actually buys them. Use questions to make THEM arrive at the realization. Speak like a trusted friend giving them insider knowledge. Never lecture. Let them talk.
+
+WHAT THEY GET (use this knowledge to craft each message):
+- A landing page already built for them — EEM26 paid for it, normally costs ₦150,000+ to build
+- A sales page already built for them — another ₦100,000+ value, they get it immediately
+- An AI sales expert (Alex) who already knows the business, handles leads, converts sales 24/7 while they sleep
+- Zero ad spend — leads come in automatically, no Facebook ads, no Google ads ever
+- 10 free stacks every week from EEM26 — each stack worth close to ₦40,000 = ₦400,000 worth of tools weekly
+- After downloading the tech stack: NO further payments until their complete setup is done
+
+Day1=Start with a question about their pain point (struggling to get leads? running ads?). Then: "Can I show you something that eliminates that completely? One question — do you actually know what's inside the tech stack?"
+Day2=The no-ads revelation. "Most people spend ₦50,000–₦200,000 every single month just to get leads. What if you never ran another ad? The tech stack automates your lead flow completely. How much would that save you every month?"
+Day3=The pre-built assets reveal. "Here's what most people don't realize until they download — EEM26 already built your landing page and your sales page. You don't touch anything technical. They paid for it. You just download and it is yours. Have you ever paid someone to build a website? Imagine getting that free."
+Day4=The AI sales expert angle. "There is something inside the tech stack most people don't know until they're inside — an AI that already knows your business, handles your leads, and converts them while you sleep. It does not take breaks. It does not get tired. What would that be worth to you every month?"
+Day5=The stack math. "EEM26 sends you 10 new stacks every single week. Each one is worth close to ₦40,000 if you built it yourself. That's ₦400,000 worth of tools landing in your hands every week — automatically. The tech stack is the key that unlocks all of it. Does that math make sense to you?"
+Day6=The one-payment clarity. "One thing people always ask me — what about after the tech stack? Here is what most people never get told: after you download, there are zero other payments until your full setup is done. Coach Victor personally handles Day 4. You earn before you spend anything else. Why haven't more people been told this?"
+Day7=The favor close. "I have walked you through this all week because I genuinely believe you are about to miss something real. Landing page. Sales page. AI that sells for you. Leads without ads. 10 stacks weekly. One payment, full setup. What is the one thing still holding you back — be honest with me."
+
+Tech Stack link: https://ecosystemexpantion.github.io/Tech_stack-premium-/` : ""}
 
 FORMAT: First line SUBJECT: then body. First name only. Max 6 sentences REMINDER, 8 sentences FOLLOWUP/CONVICTION/REENGAGE. Short punchy paragraphs. Single blank line between paragraphs. Max 2 emojis. Results on own line. No hashtags no JSON no bold markdown. Never mention Coach Victor in REMINDER. Use ₦ NGN GH₵ Ghana KSh Kenya CFA WestAfrica. If interest hot=direct+urgent. If cold=build trust first. If warm=balance urgency+story. NEVER reference previous messages or previous days — do not say "yesterday you saw" or "Friday you read" or any variation. Write every message as if it stands completely alone. No sign-off, no signature, no "Alex" at the bottom. CRITICAL DAY RULE: If DayOfWeek=Sunday — the training is TONIGHT, it has NOT happened yet. NEVER write "last night", "you missed it", "what happened last night" on Sunday — these are Monday phrases. If DayOfWeek=Saturday NEVER say "tonight". If DayOfWeek=Monday say "last night" or "missed Sunday".`;
 }
@@ -382,8 +408,8 @@ Deno.serve(async (req) => {
             .then(() => sb.from("alex_leads").update({ last_email_sent_at: now }).eq("id", lead.id))
             .catch(() => {});
         }
-        if (phase === "FOLLOWUP" || phase === "CONVICTION") {
-          const category = day_number % 2 === 1 ? "withdrawal" : "testimony";
+        if (phase === "FOLLOWUP" || phase === "CONVICTION" || phase === "TRUST_BUILDING") {
+          const category = (phase === "TRUST_BUILDING" || day_number % 2 === 1) ? "withdrawal" : "testimony";
           const vid = pickVideo(category);
           sendVideo(lead.telegram_chat_id as string, vid.fileId, vid.caption).catch(() => {});
         }
