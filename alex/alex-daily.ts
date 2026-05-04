@@ -402,6 +402,8 @@ Deno.serve(async (req) => {
         const msgBody = cleanText(fullText.replace(/^SUBJECT:.+\n?/m, "").trim());
 
         await sendTelegram(lead.telegram_chat_id as string, msgBody);
+        // Save outbound message to conversation history so alex-bot can see it when lead replies
+        sb.from("alex_conversations").insert({ lead_id: lead.id, role: "assistant", message: msgBody }).catch(() => {});
         const daysInFollowup = daysSince((lead.followup_started_at || lead.attended_at) as string);
         const now = new Date().toISOString();
         if (daysInFollowup < 14) {
