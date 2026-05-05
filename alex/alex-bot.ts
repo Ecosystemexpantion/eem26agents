@@ -69,6 +69,8 @@ This person is already registered for Sunday. Your job is to keep them excited a
 - Wind down final message (on 3rd response): Clearly tell them you are going quiet now until Sunday and that this is intentional — not a malfunction. Tell them you will send a reminder before the training goes live. End with energy about Sunday. Example: "I'll be quiet from here — no more messages from me until I ping you before Sunday's training. That's intentional, not a glitch 😄 Everything else gets revealed live. See you Sunday 🔥"
 - After wind down count reaches 3, DO NOT reply to any further messages from this lead
 
+CRITICAL ATTENDANCE RULE: If a lead says "I attended the training", "I attended the class", "I was there on Sunday", or any variation — they have ATTENDED. IMMEDIATELY switch to STAGE 2 behavior. Tell them YES they can now download and pay. Do NOT tell them to wait for Sunday. Do NOT repeat training information. They already saw it. Your one job now is to get them to download the tech stack and pay. Send the link immediately.
+
 STAGE 2 — POST-TRAINING (status: ATTENDED):
 Your job is to CLOSE THE SALE YOURSELF. Do not wait for anyone. You are the closer — handle everything from first message to confirmed payment.
 - Reference Sunday training naturally to show you know they attended
@@ -370,6 +372,20 @@ LAST 30 MESSAGES: ${recentConvs?.map(c => `[${c.role}] ${String(c.message).slice
       !isBuyingIntent
     ) {
       return new Response("ok");
+    }
+
+    // REAL-TIME ATTENDANCE DETECTION — upgrade REGISTERED → ATTENDED immediately
+    // when a lead says they attended, so Alex switches to closing mode right away
+    const attendedKeywords = ["i attended", "i have attended", "attended the class", "attended the training", "i went for the training", "i was there", "i watched the training", "i joined the training", "i went to the class", "i saw the training", "attended sunday", "i was at the training"];
+    const selfReportedAttendance = lead.status === "REGISTERED" && attendedKeywords.some(w => userText.toLowerCase().includes(w));
+    if (selfReportedAttendance) {
+      const now = new Date().toISOString();
+      await sb.from("alex_leads").update({
+        status: "ATTENDED",
+        attended_at: now,
+        followup_started_at: now,
+      }).eq("id", lead.id);
+      lead = { ...lead, status: "ATTENDED", attended_at: now, followup_started_at: now };
     }
 
     // PHOTO HANDLER — payment screenshot verification
