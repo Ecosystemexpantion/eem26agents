@@ -245,7 +245,7 @@ Deno.serve(async (req) => {
         const fullText = (res.content[0] as { type: string; text: string }).text;
         const msgBody = cleanText(fullText.replace(/^SUBJECT:.+\n?/m, "").trim());
         await sendTelegram(testLead.telegram_chat_id as string, msgBody);
-        sb.from("alex_conversations").insert({ lead_id: testLead.id, role: "assistant", message: msgBody }).catch(() => {});
+        sb.from("alex_conversations").insert({ lead_id: testLead.id, role: "assistant", message: msgBody }).then(null, () => {});
         await sendTelegram(ADMIN_CHAT_ID, `✅ Test setup invite sent to ${testLead.name}`);
       } else {
         await sendTelegram(ADMIN_CHAT_ID, `❌ No ATTENDED lead found with chat_id: ${testInviteChatId}`);
@@ -424,8 +424,7 @@ Deno.serve(async (req) => {
         const msgBody = cleanText(fullText.replace(/^SUBJECT:.+\n?/m, "").trim());
 
         await sendTelegram(lead.telegram_chat_id as string, msgBody);
-        // Save outbound message to conversation history so alex-bot can see it when lead replies
-        sb.from("alex_conversations").insert({ lead_id: lead.id, role: "assistant", message: msgBody }).catch(() => {});
+        sb.from("alex_conversations").insert({ lead_id: lead.id, role: "assistant", message: msgBody }).then(null, () => {});
         const daysInFollowup = daysSince((lead.followup_started_at || lead.attended_at) as string);
         const now = new Date().toISOString();
         if (daysInFollowup < 14) {
