@@ -391,6 +391,23 @@ LAST 30 MESSAGES: ${recentConvs?.map(c => `[${c.role}] ${String(c.message).slice
       lead = { ...lead, status: "ATTENDED", attended_at: now, followup_started_at: now };
     }
 
+    // DOWNLOAD DETECTION — if any lead says they downloaded the tech stack,
+    // upgrade to ATTENDED immediately and request payment screenshot
+    const downloadKeywords = ["downloaded techstack", "downloaded the techstack", "downloaded tech stack", "downloaded the tech stack", "i have downloaded", "i downloaded", "i've downloaded"];
+    const reportedDownload = downloadKeywords.some(w => userText.toLowerCase().includes(w));
+    if (reportedDownload) {
+      const now = new Date().toISOString();
+      await sb.from("alex_leads").update({
+        status: "ATTENDED",
+        attended_at: lead.attended_at || now,
+        followup_started_at: lead.followup_started_at || now,
+        purchase_screenshot_requested: true,
+      }).eq("id", lead.id);
+      lead = { ...lead, status: "ATTENDED", purchase_screenshot_requested: true };
+      await sendTelegram(chatId, "Send me a quick screenshot of your payment and I'll confirm it with the coaches right now so your 4-day setup can begin. 📸");
+      return new Response("ok");
+    }
+
     // PHOTO HANDLER — payment screenshot verification
     if (msg.photo && lead.status === "ATTENDED" && lead.purchase_screenshot_requested) {
       const photo = msg.photo[msg.photo.length - 1];
