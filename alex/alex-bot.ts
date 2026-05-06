@@ -364,7 +364,7 @@ LAST 30 MESSAGES: ${recentConvs?.map(c => `[${c.role}] ${String(c.message).slice
 
     // Silent after wind down complete — except for scam/trust concerns and buying intent
     const trustKeywords = ["scam", "fake", "legit", "real", "trust", "proof", "fraud", "lie", "cheat", "verify"];
-    const buyingKeywords = ["yes", "i'm ready", "i am ready", "ready to", "how much", "how do i get", "how to get", "tell me more", "what's the price", "whats the price", "price", "cost", "buy", "purchase", "download", "get it", "sign up", "join", "start", "i want it", "i want to start", "how do i download", "should i pay", "can i pay", "i want to pay", "i'll pay", "i will pay", "let's go", "lets go", "proceed", "continue", "ok let", "okay let"];
+    const buyingKeywords = ["yes", "i'm ready", "i am ready", "ready to", "how much", "how do i get", "how to get", "tell me more", "what's the price", "whats the price", "price", "cost", "buy", "purchase", "download", "get it", "sign up", "join", "start", "i want it", "i want to start", "how do i download", "should i pay", "can i pay", "i want to pay", "i'll pay", "i will pay", "let's go", "lets go", "proceed", "continue", "ok let", "okay let", "move forward", "let's proceed", "lets proceed", "i want to proceed", "i'm ready to start", "ready to start", "i want to buy", "how do i pay", "how to pay", "i want to register", "sign me up", "count me in", "i'm in", "i am in", "take my money", "where do i pay", "how do i begin", "i want to begin"];
     const isTrustConcern = trustKeywords.some((w) => userText.toLowerCase().includes(w));
     const isBuyingIntent = buyingKeywords.some((w) => userText.toLowerCase().includes(w));
     if (
@@ -483,7 +483,14 @@ This lead HAS ALREADY ATTENDED Sunday training. Sunday is OVER for them.
 IGNORE every previous message in this conversation that mentions Sunday training, waiting for Sunday, or showing up on Sunday. That chapter is closed.
 You are NOW in STAGE 2. Your ONLY job is to close the sale — push them to download the tech stack and pay.
 If they said "Yes" or "I am ready" or "Should I pay" — they are ready to buy. Ask them: "Have you already downloaded the tech stack? I need it to start the first stage of your setup."
-DO NOT mention Sunday. DO NOT tell them to wait. CLOSE THE SALE NOW.` : ""}`;
+DO NOT mention Sunday. DO NOT tell them to wait. CLOSE THE SALE NOW.` : ""}
+${isBuyingIntent && lead.status === "REGISTERED" ? `
+⚠️ OVERRIDE — LEAD IS READY TO BUY RIGHT NOW ⚠️
+This REGISTERED lead just said they want to move forward or are ready to start. IGNORE their registered status.
+Do NOT mention Sunday training. Do NOT ask them to wait. Do NOT tell them to show up on Sunday.
+Switch to STAGE 2 IMMEDIATELY. Your only job now is to close the sale.
+Send the premium tech stack link and ask them to download and pay: https://ecosystemexpantion.github.io/Tech_stack-premium-/
+CLOSE THE SALE NOW.` : ""}`;
 
     // For ATTENDED leads, drop old pre-training history — it confuses Claude into Stage 1 behavior
     const filteredHistory = lead.status === "ATTENDED"
