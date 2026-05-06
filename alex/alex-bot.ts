@@ -456,10 +456,22 @@ ${
     ? `Wind down responses used: ${lead.wind_down_count || 0} of 3 — ${3 - (lead.wind_down_count || 0)} remaining before going silent`
     : ""
 }
-Objections raised so far: ${lead.objections_raised || "none recorded"}`;
+Objections raised so far: ${lead.objections_raised || "none recorded"}
+${lead.status === "ATTENDED" ? `
+⚠️ OVERRIDE — STATUS IS ATTENDED ⚠️
+This lead HAS ALREADY ATTENDED Sunday training. Sunday is OVER for them.
+IGNORE every previous message in this conversation that mentions Sunday training, waiting for Sunday, or showing up on Sunday. That chapter is closed.
+You are NOW in STAGE 2. Your ONLY job is to close the sale — push them to download the tech stack and pay.
+If they said "Yes" or "I am ready" or "Should I pay" — they are ready to buy. Ask them: "Have you already downloaded the tech stack? I need it to start the first stage of your setup."
+DO NOT mention Sunday. DO NOT tell them to wait. CLOSE THE SALE NOW.` : ""}`;
+
+    // For ATTENDED leads, drop old pre-training history — it confuses Claude into Stage 1 behavior
+    const filteredHistory = lead.status === "ATTENDED"
+      ? (history || []).filter(h => !h.message.toLowerCase().includes("see you sunday") && !h.message.toLowerCase().includes("sunday at 8pm") && !h.message.toLowerCase().includes("show up sunday") && !h.message.toLowerCase().includes("8pm nigeria time"))
+      : (history || []);
 
     const messages = [
-      ...(history || []).map((h) => ({
+      ...filteredHistory.map((h) => ({
         role: h.role as "user" | "assistant",
         content: h.message,
       })),
