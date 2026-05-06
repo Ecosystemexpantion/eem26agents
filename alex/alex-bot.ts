@@ -492,9 +492,10 @@ Switch to STAGE 2 IMMEDIATELY. Your only job now is to close the sale.
 Send the premium tech stack link and ask them to download and pay: https://ecosystemexpantion.github.io/Tech_stack-premium-/
 CLOSE THE SALE NOW.` : ""}`;
 
-    // For ATTENDED leads, drop old pre-training history — it confuses Claude into Stage 1 behavior
+    // For ATTENDED leads, strip ALL training-related history — it confuses Claude back into Stage 1B
+    const trainingPhrases = ["see you sunday", "sunday at 8pm", "show up sunday", "8pm nigeria time", "training at 8pm", "8pm today", "8pm sharp", "show up at 8pm", "training tonight", "see you in the training", "see you in a few hours", "training is tonight", "training link", "t.me/+jx6qlzq04uq3oge0", "training happens", "training is live", "today's training", "sunday training", "live training", "training session", "training starts", "join the training", "in the training", "the training at", "watch the training"];
     const filteredHistory = lead.status === "ATTENDED"
-      ? (history || []).filter(h => !h.message.toLowerCase().includes("see you sunday") && !h.message.toLowerCase().includes("sunday at 8pm") && !h.message.toLowerCase().includes("show up sunday") && !h.message.toLowerCase().includes("8pm nigeria time"))
+      ? (history || []).filter(h => !trainingPhrases.some(phrase => h.message.toLowerCase().includes(phrase)))
       : (history || []);
 
     const messages = [
