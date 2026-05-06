@@ -361,7 +361,7 @@ LAST 30 MESSAGES: ${recentConvs?.map(c => `[${c.role}] ${String(c.message).slice
 
     // Silent after wind down complete — except for scam/trust concerns and buying intent
     const trustKeywords = ["scam", "fake", "legit", "real", "trust", "proof", "fraud", "lie", "cheat", "verify"];
-    const buyingKeywords = ["how much", "how do i get", "how to get", "i'm ready", "i am ready", "ready to", "tell me more", "what's the price", "whats the price", "price", "cost", "buy", "purchase", "download", "get it", "sign up", "join", "start", "i want it", "i want to start", "how do i download"];
+    const buyingKeywords = ["yes", "i'm ready", "i am ready", "ready to", "how much", "how do i get", "how to get", "tell me more", "what's the price", "whats the price", "price", "cost", "buy", "purchase", "download", "get it", "sign up", "join", "start", "i want it", "i want to start", "how do i download", "should i pay", "can i pay", "i want to pay", "i'll pay", "i will pay", "let's go", "lets go", "proceed", "continue", "ok let", "okay let"];
     const isTrustConcern = trustKeywords.some((w) => userText.toLowerCase().includes(w));
     const isBuyingIntent = buyingKeywords.some((w) => userText.toLowerCase().includes(w));
     if (
