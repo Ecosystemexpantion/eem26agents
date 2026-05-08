@@ -477,6 +477,13 @@ Deno.serve(async (req) => {
       .lt("followup_started_at", sevenDaysAgo)
       .or("interest_level.eq.cold,interest_level.is.null");
 
+    // Mark scam objection ATTENDED leads as COLD after 7 days (TRUST_BUILDING exhausted)
+    await sb.from("alex_leads")
+      .update({ status: "COLD" })
+      .eq("status", "ATTENDED")
+      .lt("followup_started_at", sevenDaysAgo)
+      .or("objections_raised.ilike.*scam*,objections_raised.ilike.*fake*,objections_raised.ilike.*fraud*,objections_raised.ilike.*419*,objections_raised.ilike.*not real*");
+
     // Mark hot/warm ATTENDED leads as COLD after 14 days (7 followup + 7 conviction)
     const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString();
     await sb.from("alex_leads")
