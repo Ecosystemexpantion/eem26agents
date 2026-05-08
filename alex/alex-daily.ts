@@ -56,7 +56,7 @@ function getPhaseAndDay(lead: Record<string, unknown>, dayOfWeek: string): { pha
       return { phase: "SETUP_INVITE", day_number: 1 };
     }
     if (days >= 7 && (lead.interest_level === "hot" || lead.interest_level === "warm")) {
-      return { phase: "SETUP_INVITE", day_number: 1 };
+      return { phase: "CONVICTION", day_number: Math.min(days - 6, 7) };
     }
     return { phase: "FOLLOWUP", day_number: Math.min(days + 1, 7) };
   }
